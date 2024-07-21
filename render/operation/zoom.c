@@ -1,71 +1,66 @@
-/**
- * @file  bmp.c
- * @brief 处理bmp文件的坐标信息，计算实现缩放
- * @version 1.0 （版本声明）
- * @author Dk
- * @date  July 7,2020
- */
-
+#include <include/config.h>
+#include <include/pic_operation.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
-#include "include/pic_operation.h"
-#include "include/debug_manager.h"
 
-/**
- * @Description: 对图片数据处理进行实现缩放，采用近邻取样插值
- * @param ptOriginPic - 缩放前图片信息, ptZoomPic - 缩放后图片信息
- * @return 0 - 成功缩放，-1 - 不支持缩放
- */
-// 缩放比例通过原图片和缩放图片之间的比例相除得知，也就是说，只要设计目标比例大小即可
+/**********************************************************************
+ * 函数名称： PicZoom
+ * 功能描述： 近邻取样插值方法缩放图片
+ *            注意该函数会分配内存来存放缩放后的图片,用完后要用free函数释放掉
+ *            "近邻取样插值"的原理请参考网友"lantianyu520"所著的"图像缩放算法"
+ * 输入参数： ptOriginPic - 内含原始图片的象素数据
+ *            ptBigPic    - 内含缩放后的图片的象素数据
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 int PicZoom(PT_PixelDatas ptOriginPic, PT_PixelDatas ptZoomPic)
 {
-	unsigned long x, y;
-	unsigned long PixelBytes;
-	unsigned long SrcY;
-    unsigned long DstWidth;
-    unsigned long *pSrcXTable;
-	unsigned char *pDest;
-	unsigned char *pSrc;
+    unsigned long dwDstWidth = ptZoomPic->iWidth;
+    unsigned long* pdwSrcXTable;
+    unsigned long x;
+    unsigned long y;
+    unsigned long dwSrcY;
+    unsigned char *pucDest;
+    unsigned char *pucSrc;
+    unsigned long dwPixelBytes = ptOriginPic->iBpp/8;
 
-	if (ptOriginPic->bpp != ptZoomPic->bpp) {
-		DebugPrint(APP_NOTICE"can not support bpp where the source %d and destination %d are different\n"
-					, ptOriginPic->bpp, ptZoomPic->bpp);
-		return -1;
-	}
-	
-	DstWidth = ptZoomPic->width;
-	PixelBytes = ptOriginPic->bpp / 8;
+    if (ptOriginPic->iBpp != ptZoomPic->iBpp)
+    {
+        return -1;
+    }
 
-	/* 分配空间 */
-	pSrcXTable = (unsigned long *)malloc(sizeof(unsigned long) * DstWidth);
-	if (pSrcXTable == NULL) {
-		DebugPrint(APP_ERR"pSrcXTable malloc err\n");
-		return -1;
-	}
+    pdwSrcXTable = malloc(sizeof(unsigned long) * dwDstWidth);
+    if (NULL == pdwSrcXTable)
+    {
+        DBG_PRINTF("malloc error!\n");
+        return -1;
+    }
 
-	/* 获取源图片一行中像素点的x坐标 */
-    for (x = 0; x < DstWidth; x++)
-        pSrcXTable[x]=(x * ptOriginPic->width / ptZoomPic->width);
+    for (x = 0; x < dwDstWidth; x++)//生成表 pdwSrcXTable
+    {
+        pdwSrcXTable[x]=(x*ptOriginPic->iWidth/ptZoomPic->iWidth);
+    }
 
-	/* 计算缩放后的坐标信息 */
-    for (y = 0; y < ptZoomPic->height; y++) {
-		SrcY = (y * ptOriginPic->height / ptZoomPic->height);		//获取源图片一列中像素点的y坐标
+    for (y = 0; y < ptZoomPic->iHeight; y++)
+    {
+        dwSrcY = (y * ptOriginPic->iHeight / ptZoomPic->iHeight);
 
-		pSrc  = ptOriginPic->PixelDatas + SrcY * ptOriginPic->linebytes;	//原图每行起始像素在内存的地址
-		pDest = ptZoomPic->PixelDatas    + y * ptZoomPic->linebytes;	//缩放图每行起始像素在内存的地址
+        pucDest = ptZoomPic->aucPixelDatas + y*ptZoomPic->iLineBytes;
+        pucSrc  = ptOriginPic->aucPixelDatas + dwSrcY*ptOriginPic->iLineBytes;
 
-		/* 原图坐标：(pSrcXTable[x], SrcY)
-		 * 缩放坐标：(x, y)
-		 */
-        for (x = 0; x < DstWidth; x++){
-			memcpy(pDest + x * PixelBytes, pSrc + pSrcXTable[x] * PixelBytes, PixelBytes); 
+        for (x = 0; x <dwDstWidth; x++)
+        {
+            /* 原图座标: pdwSrcXTable[x]，srcy
+             * 缩放座标: x, y
+             */
+             memcpy(pucDest+x*dwPixelBytes, pucSrc+pdwSrcXTable[x]*dwPixelBytes, dwPixelBytes);
         }
     }
 
-	/* 释放空间 */
-    free(pSrcXTable);
-
-	return 0;
+    free(pdwSrcXTable);
+    return 0;
 }

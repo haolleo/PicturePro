@@ -1,109 +1,422 @@
-
-/**
- * @file  browse_page.c
- * @brief 图片显示文件
- * @version 1.0 （版本声明）
- * @author Dk
- * @date  July 6,2020
- */
+#include <include/config.h>
+#include <include/render.h>
 #include <stdlib.h>
+#include <include/file.h>
+#include <include/fonts_manager.h>
 #include <string.h>
-#include <unistd.h>
-#include <stdio.h>
 
-#include "include/config.h"
-#include "include/render.h"
-#include "include/page_manager.h"
-#include "include/input_manager.h"
-#include "include/file.h"
+
+/* 图标是一个正方体, "图标+名字"也是一个正方体
+ *   --------
+ *   |  图  |
+ *   |  标  |
+ * ------------
+ * |   名字   |
+ * ------------
+ */
 
 #define DIR_FILE_ICON_WIDTH    40
 #define DIR_FILE_ICON_HEIGHT   DIR_FILE_ICON_WIDTH
 #define DIR_FILE_NAME_HEIGHT   20
-#define DIR_FILE_NAME_WIDTH   (DIR_FILE_ICON_HEIGHT + DIR_FILE_NAME_HEIGHT) //为了能保证填下？设计最大长度？
+#define DIR_FILE_NAME_WIDTH   (DIR_FILE_ICON_HEIGHT + DIR_FILE_NAME_HEIGHT)
 #define DIR_FILE_ALL_WIDTH    DIR_FILE_NAME_WIDTH
 #define DIR_FILE_ALL_HEIGHT   DIR_FILE_ALL_WIDTH
 
-/*
- * browse页面有两个区域: 菜单图标, 目录和文件图标
- * 为统一处理, "菜单图标"的序号为0,1,2,3,..., "目录和文件图标"的序号为1000,1001,1002,....
- *
+
+/* browse页面里把显示区域分为"菜单"和"目录和文件"
+ * "菜单"就是"up, select,pre_page,next_page"四个可操作的图标
+ * "目录和文件"是浏览的内容
  */
-#define DIRFILE_ICON_INDEX_BASE 1000
 
-/* 用来描述某目录里的内容 */
-static PT_DirContent *s_ptDirContents;  /* 数组:存有目录下"顶层子目录","文件"的名字 */
-static int s_DirContentsNumber;         /* s_ptDirContents数组有多少项 */ //因为链表无法得知大小
-static int s_StartIndex = 0;            /* 在屏幕上显示的第1个"目录和文件"是s_ptDirContents数组里的哪一项 */
+/* 菜单的区域 */
+static T_Layout g_atMenuIconsLayout[] = {
+//	{0, 0, 0, 0, "return.bmp"},
+    {0, 0, 0, 0, "up.bmp"},
+    {0, 0, 0, 0, "select.bmp"},
+    {0, 0, 0, 0, "pre_page.bmp"},
+    {0, 0, 0, 0, "next_page.bmp"},
+    {0, 0, 0, 0, NULL},
+};
 
-static int s_DirFileNumPerCol, s_DirFileNumPerRow;
+static T_PageLayout g_tBrowsePageMenuIconsLayout = {
+    .iMaxTotalBytes = 0,
+    .atLayout       = g_atMenuIconsLayout,
+};
 
 /* 目录或文件的区域 */
-static char *s_strDirClosedIconName  = "fold_closed.bmp";
-static char *s_strDirOpenedIconName  = "fold_opened.bmp";
+static char *g_strDirClosedIconName  = "fold_closed.bmp";
+static char *g_strDirOpenedIconName  = "fold_opened.bmp";
 static char *g_strFileIconName = "file.bmp";
+static T_Layout *g_atDirAndFileLayout;
+static T_PageLayout g_tBrowsePageDirAndFileLayout = {
+    .iMaxTotalBytes = 0,
+    //.atLayout       = g_atDirAndFileLayout,
+};
 
-static T_Layout *s_ptDirAndFileLayout; //0 图标 1： 文字  目录和文件的layout显示
+static int g_iDirFileNumPerCol, g_iDirFileNumPerRow;
 
-//将图标提取出来，并根据实际显示大小赋予内容
-static T_PixelDatas s_tDirClosedIconPixelDatas;
-static T_PixelDatas s_tDirOpenedIconPixelDatas;
-static T_PixelDatas s_tFileIconPixelDatas;
+/* 用来描述某目录里的内容 */
+static PT_DirContent *g_aptDirContents;  /* 数组:存有目录下"顶层子目录","文件"的名字 */
+static int g_iDirContentsNumber;         /* g_aptDirContents数组有多少项 */
+static int g_iStartIndex = 0;            /* 在屏幕上显示的第1个"目录和文件"是g_aptDirContents数组里的哪一项 */
 
 /* 当前显示的目录 */
-static char s_strCurDir[256] = DEFAULT_DIR;
-// 被选择的目录 ：： 用来进行连播模式
-static char s_strSelectedDir[256] = DEFAULT_DIR;
+static char g_strCurDir[256] = DEFAULT_DIR;
+static char g_strSelectedDir[256] = DEFAULT_DIR;
 
-static T_Layout s_tBrowsePageMenusLayout[] = {
-//	{"return.bmp",    0, 0, 0, 0},
-    { "up.bmp", 	  0, 0, 0, 0},
-    {"select.bmp",    0, 0, 0, 0},
-    {"pre_page.bmp",  0, 0, 0, 0},
-    {"next_page.bmp", 0, 0, 0, 0},
-    {NULL,			  0, 0, 0, 0},
-};
+static T_PixelDatas g_tDirClosedIconPixelDatas;
+static T_PixelDatas g_tDirOpenedIconPixelDatas;
+static T_PixelDatas g_tFileIconPixelDatas;
 
-// 菜单界面是固定的
-static T_PageLayout s_tBrowsePageLayout = {
-    .MaxTotalBytes = 0,
-    .ptLayout      = s_tBrowsePageMenusLayout,
-};
 
-// 文件和目录界面不固定
-static T_PageLayout s_tBrowsePageDirAndFileLayout = {
-    .MaxTotalBytes = 0,
-    //.ptLayout      = s_tBrowsePageMenusLayout,
-};
-
+/**********************************************************************
+ * 函数名称： GetSelectedDir
+ * 功能描述： 在"浏览页面"中,用户可能会选中某个目录-----它就是"连播页面"要显示的目录
+ *            本函数返回这个目录名
+ * 输入参数： 无
+ * 输出参数： strSeletedDir - 里面存有用户选中的目录的名字
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 void GetSelectedDir(char *strSeletedDir)
 {
-    strncpy(strSeletedDir, s_strSelectedDir, 256);
+    strncpy(strSeletedDir, g_strSelectedDir, 256);
     strSeletedDir[255] = '\0';
 }
 
+/**********************************************************************
+ * 函数名称： CalcBrowsePageMenusLayout
+ * 功能描述： 计算页面中各图标座标值
+ * 输入参数： 无
+ * 输出参数： ptPageLayout - 内含各图标的左上角/右下角座标值
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static void  CalcBrowsePageMenusLayout(PT_PageLayout ptPageLayout)
+{
+    int iWidth;
+    int iHeight;
+    int iXres, iYres, iBpp;
+    int iTmpTotalBytes;
+    PT_Layout atLayout;
+    int i;
 
-/**
- * @Description: browse页面输入事件函数
- * @param pName - 寻找结构体的名字
- * @return 0
- */
+    atLayout = ptPageLayout->atLayout;
+    GetDispResolution(&iXres, &iYres, &iBpp);
+    ptPageLayout->iBpp = iBpp;
+
+    if (iXres < iYres)
+    {
+        /*	 iXres/4
+         *	  ----------------------------------
+         *	   up	select	pre_page  next_page
+         *
+         *
+         *
+         *
+         *
+         *
+         *	  ----------------------------------
+         */
+
+        iWidth  = iXres / 4;
+        iHeight = iWidth;
+
+        /* return图标 */
+        atLayout[0].iTopLeftY  = 0;
+        atLayout[0].iBotRightY = atLayout[0].iTopLeftY + iHeight - 1;
+        atLayout[0].iTopLeftX  = 0;
+        atLayout[0].iBotRightX = atLayout[0].iTopLeftX + iWidth - 1;
+
+        /* up图标 */
+        atLayout[1].iTopLeftY  = 0;
+        atLayout[1].iBotRightY = atLayout[1].iTopLeftY + iHeight - 1;
+        atLayout[1].iTopLeftX  = atLayout[0].iBotRightX + 1;
+        atLayout[1].iBotRightX = atLayout[1].iTopLeftX + iWidth - 1;
+
+        /* select图标 */
+        atLayout[2].iTopLeftY  = 0;
+        atLayout[2].iBotRightY = atLayout[2].iTopLeftY + iHeight - 1;
+        atLayout[2].iTopLeftX  = atLayout[1].iBotRightX + 1;
+        atLayout[2].iBotRightX = atLayout[2].iTopLeftX + iWidth - 1;
+
+        /* pre_page图标 */
+        atLayout[3].iTopLeftY  = 0;
+        atLayout[3].iBotRightY = atLayout[3].iTopLeftY + iHeight - 1;
+        atLayout[3].iTopLeftX  = atLayout[2].iBotRightX + 1;
+        atLayout[3].iBotRightX = atLayout[3].iTopLeftX + iWidth - 1;
+#if 0
+        /* next_page图标 */
+        atLayout[4].iTopLeftY  = 0;
+        atLayout[4].iBotRightY = atLayout[4].iTopLeftY + iHeight - 1;
+        atLayout[4].iTopLeftX  = atLayout[3].iBotRightX + 1;
+        atLayout[4].iBotRightX = atLayout[4].iTopLeftX + iWidth - 1;
+#endif
+    }
+    else
+    {
+        /*	 iYres/4
+         *	  ----------------------------------
+         *	   up
+         *
+         *    select
+         *
+         *    pre_page
+         *
+         *   next_page
+         *
+         *	  ----------------------------------
+         */
+
+        iHeight  = iYres / 4;
+        iWidth = iHeight;
+
+        /* return图标 */
+        atLayout[0].iTopLeftY  = 0;
+        atLayout[0].iBotRightY = atLayout[0].iTopLeftY + iHeight - 1;
+        atLayout[0].iTopLeftX  = 0;
+        atLayout[0].iBotRightX = atLayout[0].iTopLeftX + iWidth - 1;
+
+        /* up图标 */
+        atLayout[1].iTopLeftY  = atLayout[0].iBotRightY+ 1;
+        atLayout[1].iBotRightY = atLayout[1].iTopLeftY + iHeight - 1;
+        atLayout[1].iTopLeftX  = 0;
+        atLayout[1].iBotRightX = atLayout[1].iTopLeftX + iWidth - 1;
+
+        /* select图标 */
+        atLayout[2].iTopLeftY  = atLayout[1].iBotRightY + 1;
+        atLayout[2].iBotRightY = atLayout[2].iTopLeftY + iHeight - 1;
+        atLayout[2].iTopLeftX  = 0;
+        atLayout[2].iBotRightX = atLayout[2].iTopLeftX + iWidth - 1;
+
+        /* pre_page图标 */
+        atLayout[3].iTopLeftY  = atLayout[2].iBotRightY + 1;
+        atLayout[3].iBotRightY = atLayout[3].iTopLeftY + iHeight - 1;
+        atLayout[3].iTopLeftX  = 0;
+        atLayout[3].iBotRightX = atLayout[3].iTopLeftX + iWidth - 1;
+#if 0
+        /* next_page图标 */
+        atLayout[4].iTopLeftY  = atLayout[3].iBotRightY + 1;
+        atLayout[4].iBotRightY = atLayout[4].iTopLeftY + iHeight - 1;
+        atLayout[4].iTopLeftX  = 0;
+        atLayout[4].iBotRightX = atLayout[4].iTopLeftX + iWidth - 1;
+#endif
+    }
+
+    i = 0;
+    while (atLayout[i].strIconName)
+    {
+        iTmpTotalBytes = (atLayout[i].iBotRightX - atLayout[i].iTopLeftX + 1) * (atLayout[i].iBotRightY - atLayout[i].iTopLeftY + 1) * iBpp / 8;
+        if (ptPageLayout->iMaxTotalBytes < iTmpTotalBytes)
+        {
+            ptPageLayout->iMaxTotalBytes = iTmpTotalBytes;
+        }
+        i++;
+    }
+}
+
+
+/**********************************************************************
+ * 函数名称： CalcBrowsePageDirAndFilesLayout
+ * 功能描述： 计算"目录和文件"的显示区域
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static int CalcBrowsePageDirAndFilesLayout(void)
+{
+    int iXres, iYres, iBpp;
+    int iTopLeftX, iTopLeftY;
+    int iTopLeftXBak;
+    int iBotRightX, iBotRightY;
+    int iIconWidth, iIconHeight;
+    int iNumPerCol, iNumPerRow;
+    int iDeltaX, iDeltaY;
+    int i, j, k = 0;
+
+    GetDispResolution(&iXres, &iYres, &iBpp);
+
+    if (iXres < iYres)
+    {
+        /* --------------------------------------
+         *    up select pre_page next_page 图标
+         * --------------------------------------
+         *
+         *           目录和文件
+         *
+         *
+         * --------------------------------------
+         */
+        iTopLeftX  = 0;
+        iBotRightX = iXres - 1;
+        iTopLeftY  = g_atMenuIconsLayout[0].iBotRightY + 1;
+        iBotRightY = iYres - 1;
+    }
+    else
+    {
+        /*	 iYres/4
+         *	  ----------------------------------
+         *	   up      |
+         *             |
+         *    select   |
+         *             |     目录和文件
+         *    pre_page |
+         *             |
+         *   next_page |
+         *             |
+         *	  ----------------------------------
+         */
+        iTopLeftX  = g_atMenuIconsLayout[0].iBotRightX + 1;
+        iBotRightX = iXres - 1;
+        iTopLeftY  = 0;
+        iBotRightY = iYres - 1;
+    }
+
+    /* 确定一行显示多少个"目录或文件", 显示多少行 */
+    iIconWidth  = DIR_FILE_NAME_WIDTH;
+    iIconHeight = iIconWidth;
+
+    /* 图标之间的间隔要大于10个象素 */
+    iNumPerRow = (iBotRightX - iTopLeftX + 1) / iIconWidth;
+    while (1)
+    {
+        iDeltaX  = (iBotRightX - iTopLeftX + 1) - iIconWidth * iNumPerRow;
+        if ((iDeltaX / (iNumPerRow + 1)) < 10)
+            iNumPerRow--;
+        else
+            break;
+    }
+
+    iNumPerCol = (iBotRightY - iTopLeftY + 1) / iIconHeight;
+    while (1)
+    {
+        iDeltaY  = (iBotRightY - iTopLeftY + 1) - iIconHeight * iNumPerCol;
+        if ((iDeltaY / (iNumPerCol + 1)) < 10)
+            iNumPerCol--;
+        else
+            break;
+    }
+
+    /* 每个图标之间的间隔 */
+    iDeltaX = iDeltaX / (iNumPerRow + 1);
+    iDeltaY = iDeltaY / (iNumPerCol + 1);
+
+    g_iDirFileNumPerRow = iNumPerRow;
+    g_iDirFileNumPerCol = iNumPerCol;
+
+
+    /* 可以显示 iNumPerRow * iNumPerCol个"目录或文件"
+     * 分配"两倍+1"的T_Layout结构体: 一个用来表示图标,另一个用来表示名字
+     * 最后一个用来存NULL,借以判断结构体数组的末尾
+     */
+    g_atDirAndFileLayout = malloc(sizeof(T_Layout) * (2 * iNumPerRow * iNumPerCol + 1));
+    if (NULL == g_atDirAndFileLayout)
+    {
+        DBG_PRINTF("malloc error!\n");
+        return -1;
+    }
+
+    /* "目录和文件"整体区域的左上角、右下角坐标 */
+    g_tBrowsePageDirAndFileLayout.iTopLeftX      = iTopLeftX;
+    g_tBrowsePageDirAndFileLayout.iBotRightX     = iBotRightX;
+    g_tBrowsePageDirAndFileLayout.iTopLeftY      = iTopLeftY;
+    g_tBrowsePageDirAndFileLayout.iBotRightY     = iBotRightY;
+    g_tBrowsePageDirAndFileLayout.iBpp           = iBpp;
+    g_tBrowsePageDirAndFileLayout.atLayout       = g_atDirAndFileLayout;
+    g_tBrowsePageDirAndFileLayout.iMaxTotalBytes = DIR_FILE_ALL_WIDTH * DIR_FILE_ALL_HEIGHT * iBpp / 8;
+
+
+    /* 确定图标和名字的位置
+     *
+     * 图标是一个正方体, "图标+名字"也是一个正方体
+     *   --------
+     *   |  图  |
+     *   |  标  |
+     * ------------
+     * |   名字   |
+     * ------------
+     */
+    iTopLeftX += iDeltaX;
+    iTopLeftY += iDeltaY;
+    iTopLeftXBak = iTopLeftX;
+    for (i = 0; i < iNumPerCol; i++)
+    {
+        for (j = 0; j < iNumPerRow; j++)
+        {
+            /* 图标 */
+            g_atDirAndFileLayout[k].iTopLeftX  = iTopLeftX + (DIR_FILE_NAME_WIDTH - DIR_FILE_ICON_WIDTH) / 2;
+            g_atDirAndFileLayout[k].iBotRightX = g_atDirAndFileLayout[k].iTopLeftX + DIR_FILE_ICON_WIDTH - 1;
+            g_atDirAndFileLayout[k].iTopLeftY  = iTopLeftY;
+            g_atDirAndFileLayout[k].iBotRightY = iTopLeftY + DIR_FILE_ICON_HEIGHT - 1;
+
+            /* 名字 */
+            g_atDirAndFileLayout[k+1].iTopLeftX  = iTopLeftX;
+            g_atDirAndFileLayout[k+1].iBotRightX = iTopLeftX + DIR_FILE_NAME_WIDTH - 1;
+            g_atDirAndFileLayout[k+1].iTopLeftY  = g_atDirAndFileLayout[k].iBotRightY + 1;
+            g_atDirAndFileLayout[k+1].iBotRightY = g_atDirAndFileLayout[k+1].iTopLeftY + DIR_FILE_NAME_HEIGHT - 1;
+
+            iTopLeftX += DIR_FILE_ALL_WIDTH + iDeltaX;
+            k += 2;
+        }
+        iTopLeftX = iTopLeftXBak;
+        iTopLeftY += DIR_FILE_ALL_HEIGHT + iDeltaY;
+    }
+
+    /* 结尾 */
+    g_atDirAndFileLayout[k].iTopLeftX   = 0;
+    g_atDirAndFileLayout[k].iBotRightX  = 0;
+    g_atDirAndFileLayout[k].iTopLeftY   = 0;
+    g_atDirAndFileLayout[k].iBotRightY  = 0;
+    g_atDirAndFileLayout[k].strIconName = NULL;
+
+    return 0;
+}
+
+/**********************************************************************
+ * 函数名称： BrowsePageGetInputEvent
+ * 功能描述： 为"浏览页面"获得输入数据,判断输入事件位于哪一个图标上
+ * 输入参数： ptPageLayout - 内含多个图标的显示区域
+ * 输出参数： ptInputEvent - 内含得到的输入数据
+ * 返 回 值： -1     - 输入数据不位于任何一个图标之上
+ *            其他值 - 输入数据所落在的图标(PageLayout->atLayout数组的哪一项)
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static int BrowsePageGetInputEvent(PT_PageLayout ptPageLayout, PT_InputEvent ptInputEvent)
 {
     return GenericGetInputEvent(ptPageLayout, ptInputEvent);
 }
 
+/**********************************************************************
+ * 函数名称： GetInputPositionInPageLayout
+ * 功能描述： 为"浏览页面"获得输入数据,判断输入事件位于哪一个"目录或文件"上
+ * 输入参数： ptPageLayout - 内含"目录或文件"的显示区域
+ * 输出参数： ptInputEvent - 内含得到的输入数据
+ * 返 回 值： -1     - 输入数据不位于任何一个图标之上
+ *            其他值 - 输入数据所落在的图标(PageLayout->atLayout数组的哪一项)
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static int GetInputPositionInPageLayout(PT_PageLayout ptPageLayout, PT_InputEvent ptInputEvent)
 {
     int i = 0;
-    PT_Layout ptLayout = ptPageLayout->ptLayout;
+    PT_Layout atLayout = ptPageLayout->atLayout;
 
     /* 处理数据 */
     /* 确定触点位于哪一个按钮上 */
-    while (ptLayout[i].BotRightY)
+    while (atLayout[i].iBotRightY)
     {
-        if ((ptInputEvent->x >= ptLayout[i].TopLeftX) && (ptInputEvent->x <= ptLayout[i].BotRightX) && \
-             (ptInputEvent->y >= ptLayout[i].TopLeftY) && (ptInputEvent->y   <= ptLayout[i].BotRightY))
+        if ((ptInputEvent->iX >= atLayout[i].iTopLeftX) && (ptInputEvent->iX <= atLayout[i].iBotRightX) && \
+             (ptInputEvent->iY >= atLayout[i].iTopLeftY) && (ptInputEvent->iY <= atLayout[i].iBotRightY))
         {
             /* 找到了被点中的按钮 */
             return i;
@@ -119,293 +432,55 @@ static int GetInputPositionInPageLayout(PT_PageLayout ptPageLayout, PT_InputEven
 }
 
 
-/* 计算各图标坐标值 */
-static void  CalcBrowsePageLayout(PT_PageLayout ptPageLayout)
-{	
-    int i;
-    int width;
-    int height;
-    int xres, yres, bpp;
-    int TmpTotalBytes;
-    PT_Layout ptLayout;
-
-    ptLayout = ptPageLayout->ptLayout;
-    GetDispResolution(&xres, &yres, &bpp);
-    ptPageLayout->bpp = bpp;
-
-    /*   xres/4
-     *    ----------------------------------
-     *     up   select  pre_page  next_page
-     *
-     *
-     *
-     *
-     *
-     *
-     *    ----------------------------------
-     */
-     //取短边作为放置图标的地方
-    if (xres < yres) {
-        width  = xres / 4;
-        height = width;
-
-        /* return图标 */
-        ptLayout[0].TopLeftY  = 0;
-        ptLayout[0].BotRightY = ptLayout[0].TopLeftY + height - 1;
-        ptLayout[0].TopLeftX  = 0;
-        ptLayout[0].BotRightX = ptLayout[0].TopLeftX + width - 1;
-
-        /* up图标 */
-        ptLayout[1].TopLeftY  = 0;
-        ptLayout[1].BotRightY = ptLayout[1].TopLeftY + height - 1;
-        ptLayout[1].TopLeftX  = ptLayout[0].BotRightX + 1;
-        ptLayout[1].BotRightX = ptLayout[1].TopLeftX + width - 1;
-
-        /* select图标 */
-        ptLayout[2].TopLeftY  = 0;
-        ptLayout[2].BotRightY = ptLayout[2].TopLeftY + height - 1;
-        ptLayout[2].TopLeftX  = ptLayout[1].BotRightX + 1;
-        ptLayout[2].BotRightX = ptLayout[2].TopLeftX + width - 1;
-
-        /* pre_page图标 */
-        ptLayout[3].TopLeftY  = 0;
-        ptLayout[3].BotRightY = ptLayout[3].TopLeftY + height - 1;
-        ptLayout[3].TopLeftX  = ptLayout[2].BotRightX + 1;
-        ptLayout[3].BotRightX = ptLayout[3].TopLeftX + width - 1;
-
-    } else {
-        height  = yres / 4;
-        width = height;
-
-        /* return图标 */
-        ptLayout[0].TopLeftY  = 0;
-        ptLayout[0].BotRightY = ptLayout[0].TopLeftY + height - 1;
-        ptLayout[0].TopLeftX  = 0;
-        ptLayout[0].BotRightX = ptLayout[0].TopLeftX + width - 1;
-
-        /* up图标 */
-        ptLayout[1].TopLeftY  = ptLayout[0].BotRightY+ 1;
-        ptLayout[1].BotRightY = ptLayout[1].TopLeftY + height - 1;
-        ptLayout[1].TopLeftX  = 0;
-        ptLayout[1].BotRightX = ptLayout[1].TopLeftX + width - 1;
-
-        /* select图标 */
-        ptLayout[2].TopLeftY  = ptLayout[1].BotRightY + 1;
-        ptLayout[2].BotRightY = ptLayout[2].TopLeftY + height - 1;
-        ptLayout[2].TopLeftX  = 0;
-        ptLayout[2].BotRightX = ptLayout[2].TopLeftX + width - 1;
-
-        /* pre_page图标 */
-        ptLayout[3].TopLeftY  = ptLayout[2].BotRightY + 1;
-        ptLayout[3].BotRightY = ptLayout[3].TopLeftY + height - 1;
-        ptLayout[3].TopLeftX  = 0;
-        ptLayout[3].BotRightX = ptLayout[3].TopLeftX + width - 1;
-    }
-
-    i = 0;
-    //有一点进步
-    while (ptLayout[i].strIconName) {
-        TmpTotalBytes = (ptLayout[i].BotRightX - ptLayout[i].TopLeftX + 1) *
-                    (ptLayout[i].BotRightY - ptLayout[i].TopLeftY + 1) * bpp / 8;
-        if (ptPageLayout->MaxTotalBytes < TmpTotalBytes)
-            ptPageLayout->MaxTotalBytes = TmpTotalBytes;
-
-        i++;
-    }
-
-}
-
-/* 计算目录和文件的显示区域 */
-//将整块区域进行分割，而不是根据实际的文件和目录数量进行
-static int CalcBrowsePageDirAndFilesLayout(void)
-{
-    int xres, yres, bpp;
-    int TopLeftX, TopLeftY;
-    int TopLeftXBak;
-    int BotRightX, BotRightY;
-    int IconWidth, IconHeight;
-    int NumPerCol, NumPerRow;
-    int DeltaX, DeltaY;
-    int i, j, k = 0;
-
-    GetDispResolution(&xres, &yres, &bpp);
-
-    if (xres < yres)
-    {
-        /* --------------------------------------
-         *    up select pre_page next_page 图标
-         * --------------------------------------
-         *
-         *           目录和文件
-         *
-         *
-         * --------------------------------------
-         */
-        TopLeftX  = 0;
-        BotRightX = xres - 1;
-        TopLeftY  = s_tBrowsePageMenusLayout[0].BotRightY + 1;
-        BotRightY = yres - 1;
-    }
-    else
-    {
-        /*	 yres/4
-         *	  ----------------------------------
-         *	   up      |
-         *             |
-         *    select   |
-         *             |     目录和文件
-         *    pre_page |
-         *             |
-         *   next_page |
-         *             |
-         *	  ----------------------------------
-         */
-        TopLeftX  = s_tBrowsePageMenusLayout[0].BotRightX + 1;
-        BotRightX = xres - 1;
-        TopLeftY  = 0;
-        BotRightY = yres - 1;
-    }
-
-    /* 确定一行显示多少个"目录或文件", 显示多少行 */
-    IconWidth  = DIR_FILE_NAME_WIDTH;
-    IconHeight = IconWidth;
-
-    /* 图标之间的间隔要大于10个象素 */
-    NumPerRow = (BotRightX - TopLeftX + 1) / IconWidth; //计算能放置的图标数量
-    while (1)
-    {
-        DeltaX  = (BotRightX - TopLeftX + 1) - IconWidth * NumPerRow;
-        if ((DeltaX / (NumPerRow + 1)) < 10)//剩余的空间足够负担NumPerRow + 1个图标的间隔
-            NumPerRow--;
-        else
-            break;
-    }
-
-    NumPerCol = (BotRightY - TopLeftY + 1) / IconHeight;
-    while (1)
-    {
-        DeltaY  = (BotRightY - TopLeftY + 1) - IconHeight * NumPerCol;
-        if ((DeltaY / (NumPerCol + 1)) < 10)
-            NumPerCol--;
-        else
-            break;
-    }
-
-    /* 每个图标之间的间隔 */
-    DeltaX = DeltaX / (NumPerRow + 1);
-    DeltaY = DeltaY / (NumPerCol + 1);
-
-    s_DirFileNumPerRow = NumPerRow;
-    s_DirFileNumPerCol = NumPerCol;
-
-    //DebugPrint("s_DirFileNumPerRow = %d, s_DirFileNumPerCol = %d\n", s_DirFileNumPerRow, s_DirFileNumPerCol);
-
-    /* 可以显示 NumPerRow * NumPerCol个"目录或文件"
-     * 分配"两倍+1"的T_Layout结构体: 一个用来表示图标,另一个用来表示名字
-     * 最后一个用来存NULL,借以判断结构体数组的末尾
-     */
-    s_ptDirAndFileLayout = malloc(sizeof(T_Layout) * (2 * NumPerRow * NumPerCol + 1));
-    if (NULL == s_ptDirAndFileLayout)
-    {
-        DebugPrint("malloc error!\n");
-        return -1;
-    }
-
-    /* "目录和文件"整体区域的左上角、右下角坐标 */
-    s_tBrowsePageDirAndFileLayout.TopLeftX      = TopLeftX;
-    s_tBrowsePageDirAndFileLayout.BotRightX     = BotRightX;
-    s_tBrowsePageDirAndFileLayout.TopLeftY      = TopLeftY;
-    s_tBrowsePageDirAndFileLayout.BotRightY     = BotRightY;
-    s_tBrowsePageDirAndFileLayout.bpp           = bpp;
-    s_tBrowsePageDirAndFileLayout.ptLayout       = s_ptDirAndFileLayout;
-    s_tBrowsePageDirAndFileLayout.MaxTotalBytes = DIR_FILE_ALL_WIDTH * DIR_FILE_ALL_HEIGHT * bpp / 8;
-
-    //DebugPrint("s_tBrowsePageDirAndFileLayout: \n");
-    //DebugPrint("(%d, %d) ~ (%d, %d)\n", TopLeftX, TopLeftY, BotRightX, BotRightY);
-    
-    /* 确定图标和名字的位置
-     *
-     * 图标是一个正方体, "图标+名字"也是一个正方体
-     *   --------
-     *   |  图  |
-     *   |  标  |
-     * ------------
-     * |   名字   |
-     * ------------
-     */
-    TopLeftX += DeltaX;
-    TopLeftY += DeltaY;
-    TopLeftXBak = TopLeftX;
-    for (i = 0; i < NumPerCol; i++)
-    {
-        for (j = 0; j < NumPerRow; j++)
-        {
-            /* 图标 */
-            s_ptDirAndFileLayout[k].TopLeftX  = TopLeftX + (DIR_FILE_NAME_WIDTH - DIR_FILE_ICON_WIDTH) / 2;
-            s_ptDirAndFileLayout[k].BotRightX = s_ptDirAndFileLayout[k].TopLeftX + DIR_FILE_ICON_WIDTH - 1;
-            s_ptDirAndFileLayout[k].TopLeftY  = TopLeftY;
-            s_ptDirAndFileLayout[k].BotRightY = TopLeftY + DIR_FILE_ICON_HEIGHT - 1;
-
-            /* 名字 */
-            s_ptDirAndFileLayout[k+1].TopLeftX  = TopLeftX;
-            s_ptDirAndFileLayout[k+1].BotRightX = TopLeftX + DIR_FILE_NAME_WIDTH - 1;
-            s_ptDirAndFileLayout[k+1].TopLeftY  = s_ptDirAndFileLayout[k].BotRightY + 1; //同一排的字在其对应图标下面1个像素
-            s_ptDirAndFileLayout[k+1].BotRightY = s_ptDirAndFileLayout[k+1].TopLeftY + DIR_FILE_NAME_HEIGHT - 1;
-
-            TopLeftX += DIR_FILE_ALL_WIDTH + DeltaX;
-            k += 2;
-        }
-        TopLeftX = TopLeftXBak;
-        TopLeftY += DIR_FILE_ALL_HEIGHT + DeltaY;
-    }
-
-    /* 结尾 */
-    s_ptDirAndFileLayout[k].TopLeftX   = 0;
-    s_ptDirAndFileLayout[k].BotRightX  = 0;
-    s_ptDirAndFileLayout[k].TopLeftY   = 0;
-    s_ptDirAndFileLayout[k].BotRightY  = 0;
-    s_ptDirAndFileLayout[k].strIconName = NULL;
-
-    return 0;
-}
-
-/* aptDirContents数组中有iDirContentNumber项
- * 从第iStartIndex项开始显示, 显示满一页
- */
+/**********************************************************************
+ * 函数名称： GenerateBrowsePageDirAndFile
+ * 功能描述： 为"浏览页面"生成"目录或文件"区域中的图标和文字,就是显示目录内容
+ * 输入参数： iStartIndex        - 在屏幕上显示的第1个"目录和文件"是aptDirContents数组里的哪一项
+ *            iDirContentsNumber - aptDirContents数组有多少项
+ *            aptDirContents     - 数组:存有目录下"顶层子目录","文件"的名字
+ *            ptVideoMem         - 在这个VideoMem中构造页面
+ * 输出参数： 无
+ * 返 回 值： 0      - 成功
+ *            其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static int GenerateBrowsePageDirAndFile(int iStartIndex, int iDirContentsNumber, PT_DirContent *aptDirContents, PT_VideoMem ptVideoMem)
 {
-    int error;
+    int iError;
     int i, j, k = 0;
     int iDirContentIndex = iStartIndex;
-    PT_PageLayout ptPageLayout = &s_tBrowsePageDirAndFileLayout;
-    PT_Layout ptLayout = ptPageLayout->ptLayout;
+    PT_PageLayout ptPageLayout = &g_tBrowsePageDirAndFileLayout;
+    PT_Layout atLayout = ptPageLayout->atLayout;
 
-    ClearRectangleInVideoMem(ptPageLayout->TopLeftX, ptPageLayout->TopLeftY, ptPageLayout->BotRightX, ptPageLayout->BotRightY, ptVideoMem, COLOR_BACKGROUND);
+    (void)iError;
 
-    SetFontSize(ptLayout[1].BotRightY - ptLayout[1].TopLeftY - 5);
+    ClearRectangleInVideoMem(ptPageLayout->iTopLeftX, ptPageLayout->iTopLeftY, ptPageLayout->iBotRightX, ptPageLayout->iBotRightY, ptVideoMem, COLOR_BACKGROUND);
 
-    for (i = 0; i < s_DirFileNumPerCol; i++)
+    SetFontSize(atLayout[1].iBotRightY - atLayout[1].iTopLeftY - 5);
+
+    for (i = 0; i < g_iDirFileNumPerCol; i++)
     {
-        for (j = 0; j < s_DirFileNumPerRow; j++)
+        for (j = 0; j < g_iDirFileNumPerRow; j++)
         {
             if (iDirContentIndex < iDirContentsNumber)
             {
                 /* 显示目录或文件的图标 */
                 if (aptDirContents[iDirContentIndex]->eFileType == FILETYPE_DIR)
                 {
-                    PicMerge(ptLayout[k].TopLeftX, ptLayout[k].TopLeftY, &s_tDirClosedIconPixelDatas, &ptVideoMem->tPixelDatas);
+                    PicMerge(atLayout[k].iTopLeftX, atLayout[k].iTopLeftY, &g_tDirClosedIconPixelDatas, &ptVideoMem->tPixelDatas);
                 }
                 else
                 {
-                    PicMerge(ptLayout[k].TopLeftX, ptLayout[k].TopLeftY, &s_tFileIconPixelDatas, &ptVideoMem->tPixelDatas);
+                    PicMerge(atLayout[k].iTopLeftX, atLayout[k].iTopLeftY, &g_tFileIconPixelDatas, &ptVideoMem->tPixelDatas);
                 }
 
                 k++;
                 /* 显示目录或文件的名字 */
                 //DBG_PRINTF("MergerStringToCenterOfRectangleInVideoMem: %s\n", aptDirContents[iDirContentIndex]->strName);
-                //显示图标下面的文字
-                error = MergerStringToCenterOfRectangleInVideoMem(ptLayout[k].TopLeftX, ptLayout[k].TopLeftY, ptLayout[k].BotRightX, ptLayout[k].BotRightY, (unsigned char *)aptDirContents[iDirContentIndex]->strName, ptVideoMem);
-                //文字也是p_layout，也要+1
+                iError = MergerStringToCenterOfRectangleInVideoMem(atLayout[k].iTopLeftX, atLayout[k].iTopLeftY, atLayout[k].iBotRightX, atLayout[k].iBotRightY, (unsigned char *)aptDirContents[iDirContentIndex]->strName, ptVideoMem);
+                //ClearRectangleInVideoMem(atLayout[k].iTopLeftX, atLayout[k].iTopLeftY, atLayout[k].iBotRightX, atLayout[k].iBotRightY, ptVideoMem, 0xff0000);
                 k++;
 
                 iDirContentIndex++;
@@ -421,453 +496,525 @@ static int GenerateBrowsePageDirAndFile(int iStartIndex, int iDirContentsNumber,
         }
     }
     return 0;
-
 }
 
+
+/**********************************************************************
+ * 函数名称： GenerateDirAndFileIcons
+ * 功能描述： 为"浏览页面"生成菜单区域中的图标
+ * 输入参数： ptPageLayout - 内含多个图标的文件名和显示区域
+ * 输出参数： 无
+ * 返 回 值： 0      - 成功
+ *            其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static int GenerateDirAndFileIcons(PT_PageLayout ptPageLayout)
 {
     T_PixelDatas tOriginIconPixelDatas;
-    int error;
-    int xres, yres, bpp;
-    PT_Layout ptLayout = ptPageLayout->ptLayout;
+    int iError;
+    int iXres, iYres, iBpp;
+    PT_Layout atLayout = ptPageLayout->atLayout;
 
-    GetDispResolution(&xres, &yres, &bpp);
+    GetDispResolution(&iXres, &iYres, &iBpp);
 
     /* 给目录图标、文件图标分配内存 */
-    s_tDirClosedIconPixelDatas.bpp          = bpp;
-    s_tDirClosedIconPixelDatas.PixelDatas = malloc(ptPageLayout->MaxTotalBytes); //好像大小是确定的
-    if (s_tDirClosedIconPixelDatas.PixelDatas == NULL)
+    g_tDirClosedIconPixelDatas.iBpp          = iBpp;
+    g_tDirClosedIconPixelDatas.aucPixelDatas = malloc(ptPageLayout->iMaxTotalBytes);
+    if (g_tDirClosedIconPixelDatas.aucPixelDatas == NULL)
     {
         return -1;
     }
 
-    s_tDirOpenedIconPixelDatas.bpp          = bpp;
-    s_tDirOpenedIconPixelDatas.PixelDatas = malloc(ptPageLayout->MaxTotalBytes);
-    if (s_tDirOpenedIconPixelDatas.PixelDatas == NULL)
+    g_tDirOpenedIconPixelDatas.iBpp          = iBpp;
+    g_tDirOpenedIconPixelDatas.aucPixelDatas = malloc(ptPageLayout->iMaxTotalBytes);
+    if (g_tDirOpenedIconPixelDatas.aucPixelDatas == NULL)
     {
         return -1;
     }
 
-    s_tFileIconPixelDatas.bpp          = bpp;
-    s_tFileIconPixelDatas.PixelDatas = malloc(ptPageLayout->MaxTotalBytes);
-    if (s_tFileIconPixelDatas.PixelDatas == NULL)
+    g_tFileIconPixelDatas.iBpp          = iBpp;
+    g_tFileIconPixelDatas.aucPixelDatas = malloc(ptPageLayout->iMaxTotalBytes);
+    if (g_tFileIconPixelDatas.aucPixelDatas == NULL)
     {
         return -1;
     }
 
     /* 从BMP文件里提取图像数据 */
     /* 1. 提取"fold_closed图标" */
-    error = GetPixelDatasForIcon(s_strDirClosedIconName, s_tFileIconPixelDatas.bpp, &tOriginIconPixelDatas);
-    if (error)
+    iError = GetPixelDatasForIcon(g_strDirClosedIconName, &tOriginIconPixelDatas);
+    if (iError)
     {
-        DBG_PRINTF("GetPixelDatasForIcon %s error!\n", s_strDirClosedIconName);
+        DBG_PRINTF("GetPixelDatasForIcon %s error!\n", g_strDirClosedIconName);
         return -1;
     }
-    s_tDirClosedIconPixelDatas.height = ptLayout[0].BotRightY - ptLayout[0].TopLeftY + 1;
-    s_tDirClosedIconPixelDatas.width  = ptLayout[0].BotRightX - ptLayout[0].TopLeftX + 1;
-    s_tDirClosedIconPixelDatas.linebytes  = s_tDirClosedIconPixelDatas.width * s_tDirClosedIconPixelDatas.bpp / 8;
-    s_tDirClosedIconPixelDatas.TotalBytes = s_tDirClosedIconPixelDatas.linebytes * s_tDirClosedIconPixelDatas.height;
-    PicZoom(&tOriginIconPixelDatas, &s_tDirClosedIconPixelDatas);//把原始大小缩放至设置大小
+    g_tDirClosedIconPixelDatas.iHeight = atLayout[0].iBotRightY - atLayout[0].iTopLeftY + 1;
+    g_tDirClosedIconPixelDatas.iWidth  = atLayout[0].iBotRightX - atLayout[0].iTopLeftX + 1;
+    g_tDirClosedIconPixelDatas.iLineBytes  = g_tDirClosedIconPixelDatas.iWidth * g_tDirClosedIconPixelDatas.iBpp / 8;
+    g_tDirClosedIconPixelDatas.iTotalBytes = g_tDirClosedIconPixelDatas.iLineBytes * g_tDirClosedIconPixelDatas.iHeight;
+    PicZoom(&tOriginIconPixelDatas, &g_tDirClosedIconPixelDatas);
     FreePixelDatasForIcon(&tOriginIconPixelDatas);
 
     /* 2. 提取"fold_opened图标" */
-    error = GetPixelDatasForIcon(s_strDirOpenedIconName,  s_tFileIconPixelDatas.bpp, &tOriginIconPixelDatas);
-    if (error)
+    iError = GetPixelDatasForIcon(g_strDirOpenedIconName, &tOriginIconPixelDatas);
+    if (iError)
     {
-        DBG_PRINTF("GetPixelDatasForIcon %s error!\n", s_strDirOpenedIconName);
+        DBG_PRINTF("GetPixelDatasForIcon %s error!\n", g_strDirOpenedIconName);
         return -1;
     }
-    s_tDirOpenedIconPixelDatas.height = ptLayout[0].BotRightY - ptLayout[0].TopLeftY + 1;
-    s_tDirOpenedIconPixelDatas.width  = ptLayout[0].BotRightX - ptLayout[0].TopLeftX + 1;
-    s_tDirOpenedIconPixelDatas.linebytes  = s_tDirOpenedIconPixelDatas.width * s_tDirOpenedIconPixelDatas.bpp / 8;
-    s_tDirOpenedIconPixelDatas.TotalBytes = s_tDirOpenedIconPixelDatas.linebytes * s_tDirOpenedIconPixelDatas.height;
-    PicZoom(&tOriginIconPixelDatas, &s_tDirOpenedIconPixelDatas);
+    g_tDirOpenedIconPixelDatas.iHeight = atLayout[0].iBotRightY - atLayout[0].iTopLeftY + 1;
+    g_tDirOpenedIconPixelDatas.iWidth  = atLayout[0].iBotRightX - atLayout[0].iTopLeftX + 1;
+    g_tDirOpenedIconPixelDatas.iLineBytes  = g_tDirOpenedIconPixelDatas.iWidth * g_tDirOpenedIconPixelDatas.iBpp / 8;
+    g_tDirOpenedIconPixelDatas.iTotalBytes = g_tDirOpenedIconPixelDatas.iLineBytes * g_tDirOpenedIconPixelDatas.iHeight;
+    PicZoom(&tOriginIconPixelDatas, &g_tDirOpenedIconPixelDatas);
     FreePixelDatasForIcon(&tOriginIconPixelDatas);
 
     /* 3. 提取"file图标" */
-    error = GetPixelDatasForIcon(g_strFileIconName, s_tFileIconPixelDatas.bpp, &tOriginIconPixelDatas);
-    if (error)
+    iError = GetPixelDatasForIcon(g_strFileIconName, &tOriginIconPixelDatas);
+    if (iError)
     {
         DBG_PRINTF("GetPixelDatasForIcon %s error!\n", g_strFileIconName);
         return -1;
     }
-    s_tFileIconPixelDatas.height = ptLayout[0].BotRightY - ptLayout[0].TopLeftY + 1;
-    s_tFileIconPixelDatas.width  = ptLayout[0].BotRightX - ptLayout[0].TopLeftX+ 1;
-    s_tFileIconPixelDatas.linebytes  = s_tDirClosedIconPixelDatas.width * s_tDirClosedIconPixelDatas.bpp / 8;
-    s_tFileIconPixelDatas.TotalBytes = s_tFileIconPixelDatas.linebytes * s_tFileIconPixelDatas.height;
-    PicZoom(&tOriginIconPixelDatas, &s_tFileIconPixelDatas);
+    g_tFileIconPixelDatas.iHeight = atLayout[0].iBotRightY - atLayout[0].iTopLeftY + 1;
+    g_tFileIconPixelDatas.iWidth  = atLayout[0].iBotRightX - atLayout[0].iTopLeftX+ 1;
+    g_tFileIconPixelDatas.iLineBytes  = g_tDirClosedIconPixelDatas.iWidth * g_tDirClosedIconPixelDatas.iBpp / 8;
+    g_tFileIconPixelDatas.iTotalBytes = g_tFileIconPixelDatas.iLineBytes * g_tFileIconPixelDatas.iHeight;
+    PicZoom(&tOriginIconPixelDatas, &g_tFileIconPixelDatas);
     FreePixelDatasForIcon(&tOriginIconPixelDatas);
 
     return 0;
 }
 
-/* 对于目录图标, 把它改为"file_opened图标"
- * 对于文件图标, 只是反选
- */
-static void SelectDirFileIcon(int DirFileIndex)
-{
-    int DirFileContentIndex;
-    PT_VideoMem ptDevVideoMem;
 
-    ptDevVideoMem = GetDevVideoMem();
-
-    DirFileIndex = DirFileIndex & ~1;
-    DirFileContentIndex = s_StartIndex + DirFileIndex/2;
-    
-    if (s_ptDirContents[DirFileContentIndex]->eFileType == FILETYPE_DIR)
-    {
-        PicMerge(s_ptDirAndFileLayout[DirFileIndex].TopLeftX, s_ptDirAndFileLayout[DirFileIndex].TopLeftY,
-                    &s_tDirClosedIconPixelDatas, &ptDevVideoMem->tPixelDatas);
-    }
-    else
-    {
-        PressButton(&s_ptDirAndFileLayout[DirFileIndex]);
-        PressButton(&s_ptDirAndFileLayout[DirFileIndex + 1]);
-    }
-}
-
-/* 对于目录图标, 把它改为"file_closeed图标"
- * 对于文件图标, 只是反选
- */
-static void DeSelectDirFileIcon(int DirFileIndex)
-{
-    int DirFileContentIndex;
-    PT_VideoMem ptDevVideoMem;
-    
-    ptDevVideoMem = GetDevVideoMem();
-
-    DirFileIndex = DirFileIndex & ~1; // 最后一位强行变为0 将DirFileIndex变为向下取为2的整数 如3-》2 5-》4
-    DirFileContentIndex = s_StartIndex + DirFileIndex/2;
-    char str[10];
-    snprintf(str, sizeof(str), "<3>%d", DirFileContentIndex);
-    printf(str);
-    
-    if (s_ptDirContents[DirFileContentIndex]->eFileType == FILETYPE_DIR)
-    {
-        PicMerge(s_ptDirAndFileLayout[DirFileIndex].TopLeftX, s_ptDirAndFileLayout[DirFileIndex].TopLeftY,
-                    &s_tDirClosedIconPixelDatas, &ptDevVideoMem->tPixelDatas);
-    }
-    else
-    {
-        ReleaseButton(&s_ptDirAndFileLayout[DirFileIndex]);
-        ReleaseButton(&s_ptDirAndFileLayout[DirFileIndex + 1]);
-    }
-}
-
+/**********************************************************************
+ * 函数名称： ShowBrowsePage
+ * 功能描述： 显示"浏览页面"
+ * 输入参数： ptPageLayout - 内含多个图标的文件名和显示区域
+ * 输出参数： 无
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static void ShowBrowsePage(PT_PageLayout ptPageLayout)
 {
-    int error;
     PT_VideoMem ptVideoMem;
-    PT_Layout ptLayout;
-    ptLayout = ptPageLayout->ptLayout;
+    int iError;
 
-    /* 获得显存 */
+        (void)iError;
+    PT_Layout atLayout = ptPageLayout->atLayout;
+
+    /* 1. 获得显存 */
     ptVideoMem = GetVideoMem(ID("browse"), 1);
-    if (ptVideoMem == NULL) {
-        DebugPrint(APP_ERR"Can not get video mem for main_page!\n");
-        return ;
+    if (ptVideoMem == NULL)
+    {
+        DBG_PRINTF("can't get video mem for browse page!\n");
+        return;
     }
 
-    /* 描画数据 */
+    /* 2. 描画数据 */
+
     /* 如果还没有计算过各图标的坐标 */
-    // 计算页面和图标的位置 ：： 所有空间计算，不根据实际的文件和目录数量来，假设所有区域都有
-    if (ptLayout[0].TopLeftX == 0) {
-        CalcBrowsePageLayout(ptPageLayout);
+    if (atLayout[0].iTopLeftX == 0)
+    {
+        CalcBrowsePageMenusLayout(ptPageLayout);
         CalcBrowsePageDirAndFilesLayout();
     }
 
-     /* 如果还没有生成"目录和文件"的图标 */
-    // 从icon中提取开闭目录，文件的图标，并给PixelData对象
-    if (!s_tDirClosedIconPixelDatas.PixelDatas)
+    /* 如果还没有生成"目录和文件"的图标 */
+    if (!g_tDirClosedIconPixelDatas.aucPixelDatas)
     {
-        GenerateDirAndFileIcons(&s_tBrowsePageDirAndFileLayout);
+        GenerateDirAndFileIcons(&g_tBrowsePageDirAndFileLayout);
     }
 
-    error = GeneratePage(ptPageLayout, ptVideoMem);
+    iError = GeneratePage(ptPageLayout, ptVideoMem);
+    iError = GenerateBrowsePageDirAndFile(g_iStartIndex, g_iDirContentsNumber, g_aptDirContents, ptVideoMem);
 
-    error = GenerateBrowsePageDirAndFile(s_StartIndex, s_DirContentsNumber, s_ptDirContents, ptVideoMem);
-    /* 刷新/加载到设备 */
+    /* 3. 刷到设备上去 */
     FlushVideoMemToDev(ptVideoMem);
 
-    /* 设置页面内存为空闲状态 */
-    // 因为已经由framebuffer显示，页面内存就可以释放了
+    /* 4. 解放显存 */
     PutVideoMem(ptVideoMem);
 }
 
 
-/**
- * @Description: 获取指定的名字的拓展文件，供外部函数调用，找寻对应结构体
- * @param pName - 寻找结构体的名字
- * @return 0
- */
-static int BrowsePageRun(PT_PageParams ptParentPageParams)
+/**********************************************************************
+ * 函数名称： SelectDirFileIcon
+ * 功能描述： 改变显示设备上的"目录或文件"的图标, 表示"已经被选中"
+ *            对于目录图标, 把它改为"file_opened图标"
+ *            对于文件图标, 只是把图标反色
+ * 输入参数： iDirFileIndex - 选中"目录和文件"区域中哪一个图标
+ * 输出参数： 无
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static void SelectDirFileIcon(int iDirFileIndex)
 {
-    int index;
-    int error;
-    int pressured;
-    int indexPressured;
-    int UsedToSelectDir = 0;
-    char *pcTmp;
-    char strTmp[256];
+    int iDirFileContentIndex;
+    PT_VideoMem ptDevVideoMem;
+
+    ptDevVideoMem = GetDevVideoMem();
+
+    iDirFileIndex = iDirFileIndex & ~1;
+    iDirFileContentIndex = g_iStartIndex + iDirFileIndex/2;
+
+    /* 如果是目录, 改变图标为"file_opened图标" */
+    if (g_aptDirContents[iDirFileContentIndex]->eFileType == FILETYPE_DIR)
+    {
+        PicMerge(g_atDirAndFileLayout[iDirFileIndex].iTopLeftX, g_atDirAndFileLayout[iDirFileIndex].iTopLeftY, &g_tDirOpenedIconPixelDatas, &ptDevVideoMem->tPixelDatas);
+    }
+    else /* 如果是文件, 颜色取反 */
+    {
+        PressButton(&g_atDirAndFileLayout[iDirFileIndex]);
+        PressButton(&g_atDirAndFileLayout[iDirFileIndex + 1]);
+    }
+}
+
+/**********************************************************************
+ * 函数名称： DeSelectDirFileIcon
+ * 功能描述： 改变显示设备上的"目录或文件"的图标, 表示"未被选中"
+ *            对于目录图标, 把它改为"file_closed图标"
+ *            对于文件图标, 只是把图标反色
+ * 输入参数： iDirFileIndex - 选中"目录和文件"区域中哪一个图标
+ * 输出参数： 无
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static void DeSelectDirFileIcon(int iDirFileIndex)
+{
+    int iDirFileContentIndex;
+    PT_VideoMem ptDevVideoMem;
+
+    ptDevVideoMem = GetDevVideoMem();
+
+    iDirFileIndex = iDirFileIndex & ~1;
+    iDirFileContentIndex = g_iStartIndex + iDirFileIndex/2;
+
+    if (g_aptDirContents[iDirFileContentIndex]->eFileType == FILETYPE_DIR)
+    {
+        PicMerge(g_atDirAndFileLayout[iDirFileIndex].iTopLeftX, g_atDirAndFileLayout[iDirFileIndex].iTopLeftY, &g_tDirClosedIconPixelDatas, &ptDevVideoMem->tPixelDatas);
+    }
+    else
+    {
+        ReleaseButton(&g_atDirAndFileLayout[iDirFileIndex]);
+        ReleaseButton(&g_atDirAndFileLayout[iDirFileIndex + 1]);
+    }
+}
+
+
+#define DIRFILE_ICON_INDEX_BASE 1000
+/**********************************************************************
+ * 函数名称： BrowsePageRun
+ * 功能描述： "浏览页面"的运行函数: 显示菜单图标,显示目录内容,读取输入数据并作出反应
+ *            "浏览页面"有两个区域: 菜单图标, 目录和文件图标
+ *             为统一处理, "菜单图标"的序号为0,1,2,3,..., "目录和文件图标"的序号为1000,1001,1002,....
+ * 输入参数： ptParentPageParams - 内含上一个页面(父页面)的参数
+ *                                 ptParentPageParams->iPageID等于ID("setting")时,本页面用于浏览/选择文件夹, 点击文件无反应
+ * 输出参数： 无
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static void BrowsePageRun(PT_PageParams ptParentPageParams)
+{
+    int iIndex;
     T_InputEvent tInputEvent;
     T_InputEvent tInputEventPrePress;
-    PT_VideoMem ptDevVideoMem;
-    int	DirFileContentIndex;
-    T_PageParams tPageParams;
+
+    int bUsedToSelectDir = 0;
+    int bIconPressed = 0;          /* 界面上是否有图标显示为"被按下" */
 
     /* "连续播放图片"时, 是从哪一个目录读取文件呢? 这是由"选择"按钮来选择该目录的
-     * 点击目录图标将进入下一级目录, 哪怎样选择目录呢? //感觉改成双击进去目录更合适
+     * 点击目录图标将进入下一级目录, 哪怎样选择目录呢?
      * 1. 先点击"选择"按钮
      * 2. 再点击某个目录图标
      */
-    int HaveClickSelectIcon = 0;
-    
+    int bHaveClickSelectIcon = 0;
+
+    int iIndexPressed = -1;    /* 被按下的图标 */
+    int iDirFileContentIndex;
+
+    int iError;
+    PT_VideoMem ptDevVideoMem;
+
+    T_PageParams tPageParams;
+    char strTmp[256];
+    char *pcTmp;
+
+    /* 这两句只是为了避免编译警告 */
+    tInputEventPrePress.tTime.tv_sec = 0;
+    tInputEventPrePress.tTime.tv_usec = 0;
+
+    if (ptParentPageParams->iPageID == ID("setting"))  /* 如果是从"设置页面"启动了本页面, 则本页面是用来选择目录的 */
+    {
+        bUsedToSelectDir = 1;
+    }
 
     ptDevVideoMem = GetDevVideoMem();
 
     /* 0. 获得要显示的目录的内容 */
-    error = GetDirContents(s_strCurDir, &s_ptDirContents, &s_DirContentsNumber); //默认是根目录
-    if (error) {
-        DebugPrint("GetDirContents error!\n");
-        return error;
+    iError = GetDirContents(g_strCurDir, &g_aptDirContents, &g_iDirContentsNumber);
+    if (iError)
+    {
+        DBG_PRINTF("GetDirContents error!\n");
+        return;
     }
-    
-    //DebugPrint("%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-    //DebugPrint("s_DirContentsNumber = %d\n", s_DirContentsNumber);
 
-    /* 显示页面 */
-    ShowBrowsePage(&s_tBrowsePageLayout);
+    /* 1. 显示页面 */
+    ShowBrowsePage(&g_tBrowsePageMenuIconsLayout);
 
-    /* 创建Prepare线程 */
+    /* 2. 创建Prepare线程 */
 
-    index = -1;
-    indexPressured = -1;
-    pressured = 0;
-    /* 调用GetInputEvent(), 获得输入事件，进而处理 */
-    while (1) {
-
+    /* 3. 调用GetInputEvent获得输入事件，进而处理 */
+    while (1)
+    {
         /* 先确定是否触摸了菜单图标 */
-        index = BrowsePageGetInputEvent(&s_tBrowsePageLayout, &tInputEvent);
+        iIndex = BrowsePageGetInputEvent(&g_tBrowsePageMenuIconsLayout, &tInputEvent);
 
         /* 如果触点不在菜单图标上, 则判断是在哪一个"目录和文件"上 */
-        if (index == -1)
+        if (iIndex == -1)
         {
-            index = GetInputPositionInPageLayout(&s_tBrowsePageDirAndFileLayout, &tInputEvent);
-            if (index != -1)
+            iIndex = GetInputPositionInPageLayout(&g_tBrowsePageDirAndFileLayout, &tInputEvent);
+            if (iIndex != -1)
             {
-                if (s_StartIndex + index / 2 < s_DirContentsNumber)  /* 判断这个触点上是否有图标 */ // /2是因为图标和文字加起来是一个布局
-                    index += DIRFILE_ICON_INDEX_BASE; /* 这是"目录和文件图标" */
+                if (g_iStartIndex + iIndex / 2 < g_iDirContentsNumber)  /* 判断这个触点上是否有图标 */
+                    iIndex += DIRFILE_ICON_INDEX_BASE; /* 这是"目录和文件图标" */
                 else
-                    index = -1;
+                    iIndex = -1;
             }
         }
 
-        /* 松开和按下不在同一个图标范围内 */
-        // 松开的处理逻辑： 按下松开 -- 则可以进行操作  对操作的解析是放在松开之后处理
-        if (tInputEvent.pressure == 0) {
-            /* 曾经有按键按下 */
-            if (pressured) {
-
-                if (indexPressured < DIRFILE_ICON_INDEX_BASE) {  /* 菜单图标 */
-
-                     /* 释放图标 */
-                    if (!(UsedToSelectDir && (indexPressured == 1))) /* "选择"图标单独处理 */
+        /* 如果是松开 */
+        if (tInputEvent.iPressure == 0)
+        {
+            /* 如果当前有图标被按下 */
+            if (bIconPressed)
+            {
+                 if (iIndexPressed < DIRFILE_ICON_INDEX_BASE)  /* 菜单图标 */
+                 {
+                    /* 释放图标 */
+                    if (!(bUsedToSelectDir && (iIndexPressed == 1))) /* "选择"图标单独处理 */
                     {
-                        ReleaseButton(&s_tBrowsePageMenusLayout[indexPressured]);
+                        ReleaseButton(&g_atMenuIconsLayout[iIndexPressed]);
                     }
 
-                    pressured = 0;
+                    bIconPressed    = 0;
 
-                /* 松开与按下的按键为同一个 */
-                if (indexPressured == index) {
-                    switch (indexPressured) {
-                        case 0: 	/* "向上"按钮 */
-                            if (0 == strcmp(s_strCurDir, "/")) {  /* 已经是顶层目录 */
-                                FreeDirContents(s_ptDirContents, s_DirContentsNumber);
-                                return 0;
-                            }
-
-                            // 如果此时目录在/book/file 那么 / 变 \0 则为 /book 之后重新来一遍GetDirContents获取/book的内容，然后显示， 此时不用计算，因为计算是一次性计算所有的区域
-                            pcTmp = strrchr(s_strCurDir, '/'); /* 找到最后一个'/', 把它去掉 */
-                            *pcTmp = '\0';
-                            FreeDirContents(s_ptDirContents, s_DirContentsNumber);
-                            error = GetDirContents(s_strCurDir, &s_ptDirContents, &s_DirContentsNumber);
-                            if (error)
+                    if (iIndexPressed == iIndex) /* 按下和松开都是同一个按钮 */
+                    {
+                        switch (iIndex)
+                        {
+                            case 0: /* "向上"按钮 */
                             {
-                                DBG_PRINTF("GetDirContents error!\n");
-                                return error;
-                            }
-                            s_StartIndex = 0;
-                            error = GenerateBrowsePageDirAndFile(s_StartIndex, s_DirContentsNumber, s_ptDirContents, ptDevVideoMem);
+                                if (0 == strcmp(g_strCurDir, "/"))  /* 已经是顶层目录 */
+                                {
+                                    FreeDirContents(g_aptDirContents, g_iDirContentsNumber);
+                                    return ;
+                                }
 
-                            break;
+                                pcTmp = strrchr(g_strCurDir, '/'); /* 找到最后一个'/', 把它去掉 */
+                                *pcTmp = '\0';
 
-                        case 1:		/* 选择 */
-                            if (!UsedToSelectDir)
-                            {
-                                /* 如果不是用于"选择目录", 该按钮无用处 */
+                                FreeDirContents(g_aptDirContents, g_iDirContentsNumber);
+                                iError = GetDirContents(g_strCurDir, &g_aptDirContents, &g_iDirContentsNumber);
+                                if (iError)
+                                {
+                                    DBG_PRINTF("GetDirContents error!\n");
+                                    return;
+                                }
+                                g_iStartIndex = 0;
+                                iError = GenerateBrowsePageDirAndFile(g_iStartIndex, g_iDirContentsNumber, g_aptDirContents, ptDevVideoMem);
+
                                 break;
                             }
-
-                            if (!HaveClickSelectIcon)  /* 第1次点击"选择"按钮 */
+                            case 1: /* "选择" */
                             {
-                                HaveClickSelectIcon = 1;
+                                if (!bUsedToSelectDir)
+                                {
+                                    /* 如果不是用于"选择目录", 该按钮无用处 */
+                                    break;
+                                }
+
+                                if (!bHaveClickSelectIcon)  /* 第1次点击"选择"按钮 */
+                                {
+                                    bHaveClickSelectIcon = 1;
+                                }
+                                else
+                                {
+                                    ReleaseButton(&g_atMenuIconsLayout[iIndexPressed]);
+                                    bIconPressed    = 0;
+                                    bHaveClickSelectIcon = 0;
+                                }
+                                break;
                             }
-                            else
+                            case 2: /* "上一页" */
                             {
-                                ReleaseButton(&s_tBrowsePageMenusLayout[indexPressured]);
-                                pressured    = 0;
-                                HaveClickSelectIcon = 0;
+                                g_iStartIndex -= g_iDirFileNumPerCol * g_iDirFileNumPerRow;
+                                if (g_iStartIndex >= 0)
+                                {
+                                    iError = GenerateBrowsePageDirAndFile(g_iStartIndex, g_iDirContentsNumber, g_aptDirContents, ptDevVideoMem);
+                                }
+                                else
+                                {
+                                    g_iStartIndex += g_iDirFileNumPerCol * g_iDirFileNumPerRow;
+                                }
+                                break;
                             }
-                            break;
-
-                        case 2:		/* 上一页 */ //是一个循环，可以一直上一页，如果是第一页，则会变成最后一页
-                            s_StartIndex -=s_DirFileNumPerCol * s_DirFileNumPerRow;
-                            if (s_StartIndex >= 0)
-                                error = GenerateBrowsePageDirAndFile(s_StartIndex, s_DirContentsNumber,
-                                                s_ptDirContents, ptDevVideoMem);
-                            else
-                                s_StartIndex +=s_DirFileNumPerCol * s_DirFileNumPerRow;
-                            break;
-
-                        case 3:		/* 下一页 */
-                            s_StartIndex +=s_DirFileNumPerCol * s_DirFileNumPerRow;
-                            if (s_StartIndex <= s_DirContentsNumber )
-                                error = GenerateBrowsePageDirAndFile(s_StartIndex, s_DirContentsNumber,
-                                                s_ptDirContents, ptDevVideoMem);
-                            else
-                                s_StartIndex -=s_DirFileNumPerCol * s_DirFileNumPerRow;
-
-                            break;
-
-                        default:
-                            break;
-                    }
-                }
-            }
-            else /* "目录和文件图标" */
-            {
-                DeSelectDirFileIcon(indexPressured - DIRFILE_ICON_INDEX_BASE);
-                pressured      = 0;
-                /*
-                 * 如果按下和松开时, 触点不处于同一个图标上, 则释放图标
-                 */
-                if (indexPressured != index)
-                {
-                    return 0;
-                }
-                else if (HaveClickSelectIcon) /* 按下和松开都是同一个按钮, 并且"选择"按钮是按下状态 */
-                {
-                    /* 如果是目录, 记录这个目录 */
-                    DirFileContentIndex = s_StartIndex + (indexPressured - DIRFILE_ICON_INDEX_BASE)/2;
-                    if (s_ptDirContents[DirFileContentIndex]->eFileType == FILETYPE_DIR)
-                    {
-                        ReleaseButton(&s_tBrowsePageMenusLayout[1]);  /* 同时松开"选择按钮" */
-                        HaveClickSelectIcon = 0;
-
-                        /* 记录目录名 */
-                        snprintf(strTmp, 256, "%s/%s", s_strCurDir, s_ptDirContents[DirFileContentIndex]->strName);
-                        strTmp[255] = '\0';
-                        strcpy(s_strSelectedDir, strTmp);
-                    }
-                }
-                else  /* "选择"按钮不被按下时, 单击目录则进入 */
-                {
-                    /* 如果是目录, 进入这个目录 */
-                    DirFileContentIndex = s_StartIndex + (indexPressured - DIRFILE_ICON_INDEX_BASE)/2;
-                    if (s_ptDirContents[DirFileContentIndex]->eFileType == FILETYPE_DIR)
-                    {
-                        snprintf(strTmp, 256, "%s/%s", s_strCurDir, s_ptDirContents[DirFileContentIndex]->strName);
-                        strTmp[255] = '\0';
-                        strcpy(s_strCurDir, strTmp);
-                        FreeDirContents(s_ptDirContents, s_DirContentsNumber);
-                        error = GetDirContents(s_strCurDir, &s_ptDirContents, &s_DirContentsNumber);
-                        if (error)
-                        {
-                            DBG_PRINTF("GetDirContents error!\n");
-                            return -1;
-                        }
-                        s_StartIndex = 0;
-                        error = GenerateBrowsePageDirAndFile(s_StartIndex, s_DirContentsNumber, s_ptDirContents, ptDevVideoMem);
-                    }
-                    else if (UsedToSelectDir == 0) /* UsedToSelectDir为0时单击文件时显示它 */
-                    {
-                        snprintf(tPageParams.strCurPictureFile, 256, "%s/%s", s_strCurDir, s_ptDirContents[DirFileContentIndex]->strName);
-                        tPageParams.strCurPictureFile[255] = '\0';
-                        //如果浏览模式点击图片，则会进入manual界面
-                        if (isPictureFileSupported(tPageParams.strCurPictureFile))
-                        {
-                            tPageParams.iPageID = ID("browse");
-                            Page("manual")->Run(&tPageParams);
-                            ShowBrowsePage(&s_tBrowsePageLayout);
+                            case 3: /* "下一页" */
+                            {
+                                g_iStartIndex += g_iDirFileNumPerCol * g_iDirFileNumPerRow;
+                                if (g_iStartIndex < g_iDirContentsNumber)
+                                {
+                                    iError = GenerateBrowsePageDirAndFile(g_iStartIndex, g_iDirContentsNumber, g_aptDirContents, ptDevVideoMem);
+                                }
+                                else
+                                {
+                                    g_iStartIndex -= g_iDirFileNumPerCol * g_iDirFileNumPerRow;
+                                }
+                                break;
+                            }
+                            default:
+                            {
+                                break;
+                            }
                         }
                     }
                 }
-            }
+                else /* "目录和文件图标" */
+                {
+
+                    /*
+                     * 如果按下和松开时, 触点不处于同一个图标上, 则释放图标
+                     */
+                    if (iIndexPressed != iIndex)
+                    {
+                        DeSelectDirFileIcon(iIndexPressed - DIRFILE_ICON_INDEX_BASE);
+                        bIconPressed      = 0;
+                    }
+                    else if (bHaveClickSelectIcon) /* 按下和松开都是同一个按钮, 并且"选择"按钮是按下状态 */
+                    {
+                        DeSelectDirFileIcon(iIndexPressed - DIRFILE_ICON_INDEX_BASE);
+                        bIconPressed    = 0;
+
+                        /* 如果是目录, 记录这个目录 */
+                        iDirFileContentIndex = g_iStartIndex + (iIndexPressed - DIRFILE_ICON_INDEX_BASE)/2;
+                        if (g_aptDirContents[iDirFileContentIndex]->eFileType == FILETYPE_DIR)
+                        {
+                            ReleaseButton(&g_atMenuIconsLayout[1]);  /* 同时松开"选择按钮" */
+                            bHaveClickSelectIcon = 0;
+
+                            /* 记录目录名 */
+                            snprintf(strTmp, 256, "%s/%s", g_strCurDir, g_aptDirContents[iDirFileContentIndex]->strName);
+                            strTmp[255] = '\0';
+                            strcpy(g_strSelectedDir, strTmp);
+                        }
+                    }
+                    else  /* "选择"按钮不被按下时, 单击目录则进入, bUsedToSelectDir为0时单击文件则显示它 */
+                    {
+                        DeSelectDirFileIcon(iIndexPressed - DIRFILE_ICON_INDEX_BASE);
+                        bIconPressed    = 0;
+
+                        /* 如果是目录, 进入这个目录 */
+                        iDirFileContentIndex = g_iStartIndex + (iIndexPressed - DIRFILE_ICON_INDEX_BASE)/2;
+                        if (g_aptDirContents[iDirFileContentIndex]->eFileType == FILETYPE_DIR)
+                        {
+                            snprintf(strTmp, 256, "%s/%s", g_strCurDir, g_aptDirContents[iDirFileContentIndex]->strName);
+                            strTmp[255] = '\0';
+                            strcpy(g_strCurDir, strTmp);
+                            FreeDirContents(g_aptDirContents, g_iDirContentsNumber);
+                            iError = GetDirContents(g_strCurDir, &g_aptDirContents, &g_iDirContentsNumber);
+                            if (iError)
+                            {
+                                DBG_PRINTF("GetDirContents error!\n");
+                                return;
+                            }
+                            g_iStartIndex = 0;
+                            iError = GenerateBrowsePageDirAndFile(g_iStartIndex, g_iDirContentsNumber, g_aptDirContents, ptDevVideoMem);
+                        }
+                        else if (bUsedToSelectDir == 0) /* bUsedToSelectDir为0时单击文件时显示它 */
+                        {
+                            snprintf(tPageParams.strCurPictureFile, 256, "%s/%s", g_strCurDir, g_aptDirContents[iDirFileContentIndex]->strName);
+                            tPageParams.strCurPictureFile[255] = '\0';
+                            if (isPictureFileSupported(tPageParams.strCurPictureFile))
+                            {
+                                tPageParams.iPageID = ID("browse");
+                                Page("manual")->Run(&tPageParams);
+                                ShowBrowsePage(&g_tBrowsePageMenuIconsLayout);
+                            }
+                        }
+                    }
+                }
             }
         }
-        else {
-            /* 松开和按下都在同一个图标范围内 */
-            /* 按下 */
-            // 按下的处理逻辑
-            if (index != -1) {
-
-                /* 之前未按下 */
-                if (!pressured) {
-                    pressured = 1;
-                    indexPressured = index;
+        else /* 按下状态 */
+        {
+            if (iIndex != -1)
+            {
+                if (!bIconPressed)  /* 之前未曾有按钮被按下 */
+                {
+                    bIconPressed = 1;
+                    iIndexPressed = iIndex;
                     tInputEventPrePress = tInputEvent;  /* 记录下来 */
-                    if (index < DIRFILE_ICON_INDEX_BASE)  /* 菜单图标 */
+                    if (iIndex < DIRFILE_ICON_INDEX_BASE)  /* 菜单图标 */
                     {
-                        if (UsedToSelectDir) {
-                            if (!(HaveClickSelectIcon && (indexPressured == 1)))  /* 如果已经按下"选择"按钮, 自然不用再次反转该图标 */
-                                PressButton(&s_tBrowsePageMenusLayout[index]);
-                        }else  {
-                            if (!HaveClickSelectIcon)
-                                PressButton(&s_tBrowsePageMenusLayout[index]);
+                        if (bUsedToSelectDir)
+                        {
+                            if (!(bHaveClickSelectIcon && (iIndexPressed == 1)))  /* 如果已经按下"选择"按钮, 自然不用再次反转该图标 */
+                                PressButton(&g_atMenuIconsLayout[iIndex]);
+                        }
+                        else
+                        {
+                            if (!bHaveClickSelectIcon)
+                                PressButton(&g_atMenuIconsLayout[iIndex]);
                         }
                     }
                     else   /* 目录和文件图标 */
                     {
-                        SelectDirFileIcon(index - DIRFILE_ICON_INDEX_BASE);
+                        SelectDirFileIcon(iIndex - DIRFILE_ICON_INDEX_BASE);
                     }
                 }
 
                 /* 长按"向上"按钮, 返回 */
-                if (indexPressured == 0)
+                if (iIndexPressed == 0)
                 {
-                    if (TimeMSBetween(tInputEventPrePress.time, tInputEvent.time) > 2000) {
-                        FreeDirContents(s_ptDirContents, s_DirContentsNumber);
-                        return 0;
+                    if (TimeMSBetween(tInputEventPrePress.tTime, tInputEvent.tTime) > 2000)
+                    {
+                        FreeDirContents(g_aptDirContents, g_iDirContentsNumber);
+                        return;
                     }
-
                 }
+
             }
         }
     }
-
-    return 0;
 }
 
-static int BrowsePagePrepare()
-{
-    return 0;
-}
-
-static T_PageAction s_tBrowsePageAction = {
-    .name 			= "browse",
-    .Run 			= BrowsePageRun,
+static T_PageAction g_tBrowsePageAction = {
+    .name          = "browse",
+    .Run           = BrowsePageRun,
     .GetInputEvent = BrowsePageGetInputEvent,
-    .Prepare		= BrowsePagePrepare,
+    //.Prepare       = BrowsePagePrepare;
 };
 
-/**
- * @Description: browse页面初始化函数，注册该结构体
- * @return 0
- */
+
+/**********************************************************************
+ * 函数名称： BrowsePageInit
+ * 功能描述： 注册"浏览页面"
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 int BrowsePageInit(void)
 {
-    return RegisterPageAction(&s_tBrowsePageAction);
+    return RegisterPageAction(&g_tBrowsePageAction);
 }
-
-

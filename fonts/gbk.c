@@ -6,97 +6,129 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-static int GBKFontInit(char *pFontFile, unsigned int FontSize);
-static int GBKGetFontBitmap(unsigned int Code, PT_FontBitMap ptFontBitMap);
 
-static T_FontOpr s_tGBKFontOpr = {
-	.name          = "gbk",
-	.FontInit      = GBKFontInit,
-	.GetFontBitmap = GBKGetFontBitmap,
+static int GBKFontInit(char *pcFontFile, unsigned int dwFontSize);
+static int GBKGetFontBitmap(unsigned int dwCode, PT_FontBitMap ptFontBitMap);
+
+static T_FontOpr g_tGBKFontOpr = {
+    .name          = "gbk",
+    .FontInit      = GBKFontInit,
+    .GetFontBitmap = GBKGetFontBitmap,
 };
 
-static int s_FdHZK;
-static unsigned char *s_pHZKMem;
-static unsigned char *s_pHZKMemEnd;
+static int g_iFdHZK;
+static unsigned char *g_pucHZKMem;
+static unsigned char *g_pucHZKMemEnd;
 
-static int GBKFontInit(char *pFontFile, unsigned int FontSize)
+/**********************************************************************
+ * 函数名称： GBKFontInit
+ * 功能描述： GBK字体模块的初始化函数
+ * 输入参数： pcFontFile - GBK字库文件
+ *            dwFontSize - 字符尺寸,必须是16,否则失败(因为我们只有16x16位图)
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static int GBKFontInit(char *pcFontFile, unsigned int dwFontSize)
 {
-	struct stat tStat;
+    struct stat tStat;
 
-	if (16 != FontSize)
-	{
-		DBG_PRINTF("GBK can't support %d fontsize\n", FontSize);
-		return -1;
-	}
-	
-	s_FdHZK = open(pFontFile, O_RDONLY);
-	if (s_FdHZK < 0)
-	{
-		DBG_PRINTF("can't open %s\n", pFontFile);
-		return -1;
-	}
-	if(fstat(s_FdHZK, &tStat))
-	{
-		DBG_PRINTF("can't get fstat\n");
-		return -1;
-	}
-	s_pHZKMem = (unsigned char *)mmap(NULL , tStat.st_size, PROT_READ, MAP_SHARED, s_FdHZK, 0);
-	if (s_pHZKMem == (unsigned char *)-1)
-	{
-		DBG_PRINTF("can't mmap for hzk16\n");
-		return -1;
-	}
-	s_pHZKMemEnd = s_pHZKMem + tStat.st_size;
-	return 0;
+    if (16 != dwFontSize)
+    {
+        DBG_PRINTF("GBK can't support %d fontsize\n", dwFontSize);
+        return -1;
+    }
+
+    g_iFdHZK = open(pcFontFile, O_RDONLY);
+    if (g_iFdHZK < 0)
+    {
+        DBG_PRINTF("can't open %s\n", pcFontFile);
+        return -1;
+    }
+    if(fstat(g_iFdHZK, &tStat))
+    {
+        DBG_PRINTF("can't get fstat\n");
+        return -1;
+    }
+    g_pucHZKMem = (unsigned char *)mmap(NULL , tStat.st_size, PROT_READ, MAP_SHARED, g_iFdHZK, 0);
+    if (g_pucHZKMem == (unsigned char *)-1)
+    {
+        DBG_PRINTF("can't mmap for hzk16\n");
+        return -1;
+    }
+    g_pucHZKMemEnd = g_pucHZKMem + tStat.st_size;
+    return 0;
 }
 
-static int GBKGetFontBitmap(unsigned int Code, PT_FontBitMap ptFontBitMap)
+/**********************************************************************
+ * 函数名称： GBKGetFontBitmap
+ * 功能描述： 获得GBK字符的位图
+ * 输入参数： dwCode       - 字符的GBK编码值
+ * 输出参数： ptFontBitMap - 内含位图信息
+ * 返 回 值： 0  - 成功
+ *            -1 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static int GBKGetFontBitmap(unsigned int dwCode, PT_FontBitMap ptFontBitMap)
 {
-	int Area;
-	int Where;
+    int iArea;
+    int iWhere;
 
-	int PenX = ptFontBitMap->CurOriginX;
-	int PenY = ptFontBitMap->CurOriginY;
+    int iPenX = ptFontBitMap->iCurOriginX;
+    int iPenY = ptFontBitMap->iCurOriginY;
 
-	DBG_PRINTF("%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+    DBG_PRINTF("%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
 
-	if (Code & 0xffff0000)
-	{
-		DBG_PRINTF("don't support this code : 0x%x\n", Code);
-		return -1;
-	}	
+    if (dwCode & 0xffff0000)
+    {
+        DBG_PRINTF("don't support this code : 0x%x\n", dwCode);
+        return -1;
+    }
 
-	Area  = (int)(Code & 0xff) - 0xA1;
-	Where = (int)((Code >> 8) & 0xff) - 0xA1;
+    iArea  = (int)(dwCode & 0xff) - 0xA1;
+    iWhere = (int)((dwCode >> 8) & 0xff) - 0xA1;
 
-	if ((Area < 0) || (Where < 0))
-	{
-		DBG_PRINTF("%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-		return -1;
-	}
-	
-	ptFontBitMap->XLeft    = PenX;
-	ptFontBitMap->YTop     = PenY - 16;
-	ptFontBitMap->XMax     = PenX + 16;
-	ptFontBitMap->YMax     = PenY;
-	ptFontBitMap->Bpp      = 1;
-	ptFontBitMap->Pitch    = 2;
-	ptFontBitMap->pBuffer = s_pHZKMem + (Area * 94 + Where)*32;;	
+    if ((iArea < 0) || (iWhere < 0))
+    {
+        DBG_PRINTF("%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+        return -1;
+    }
 
-	if (ptFontBitMap->pBuffer >= s_pHZKMemEnd)
-	{
-		return -1;
-	}
+    ptFontBitMap->iXLeft    = iPenX;
+    ptFontBitMap->iYTop     = iPenY - 16;
+    ptFontBitMap->iXMax     = iPenX + 16;
+    ptFontBitMap->iYMax     = iPenY;
+    ptFontBitMap->iBpp      = 1;
+    ptFontBitMap->iPitch    = 2;
+    ptFontBitMap->pucBuffer = g_pucHZKMem + (iArea * 94 + iWhere)*32;;
 
-	ptFontBitMap->NextOriginX = PenX + 16;
-	ptFontBitMap->NextOriginY = PenY;
-	
-	//DBG_PRINTF("%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-	return 0;
+    if (ptFontBitMap->pucBuffer >= g_pucHZKMemEnd)
+    {
+        return -1;
+    }
+
+    ptFontBitMap->iNextOriginX = iPenX + 16;
+    ptFontBitMap->iNextOriginY = iPenY;
+
+    DBG_PRINTF("%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
+    return 0;
 }
 
+/**********************************************************************
+ * 函数名称： GBKInit
+ * 功能描述： 注册"GBK字体模块"
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 int GBKInit(void)
 {
-	return RegisterFontOpr(&s_tGBKFontOpr);
+    return RegisterFontOpr(&g_tGBKFontOpr);
 }
-

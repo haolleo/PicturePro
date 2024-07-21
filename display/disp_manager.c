@@ -1,411 +1,540 @@
 
+#include <include/config.h>
+#include <include/disp_manager.h>
+#include <string.h>
 #include <stdlib.h>
 
-#include "include/config.h"
-#include "include/disp_manager.h"
-#include "string.h"
+static PT_DispOpr g_ptDispOprHead;
+static PT_DispOpr g_ptDefaultDispOpr;
+static PT_VideoMem g_ptVideoMemHead;
 
-static PT_DispOpr s_ptDispOprHead;
-static PT_DispOpr s_ptDefaultDispOpr;
-
-static PT_VideoMem s_ptVieoMemHead;		//页面内存链表头
-
-/* 函数名：		 注册函数
- * 函数功能：构建一个链表：把多个拓展文件的结构体“串”起来
- * 函数实现：根据传入的结点，首先判断该链表头是否为空
- *				空则，头结点指向传入的节点，且把节点的ptNext域指向NULL
- *				不空则，尾插法插入链表
- */
+/**********************************************************************
+ * 函数名称： RegisterDispOpr
+ * 功能描述： 注册"显示模块", 把所能支持的显示设备的操作函数放入链表
+ * 输入参数： ptDispOpr - 一个结构体,内含显示设备的操作函数
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 int RegisterDispOpr(PT_DispOpr ptDispOpr)
 {
-	PT_DispOpr ptTmp;
+    PT_DispOpr ptTmp;
 
-	if (!s_ptDispOprHead)
-	{
-		s_ptDispOprHead   = ptDispOpr;
-		ptDispOpr->ptNext = NULL;
-	}
-	else
-	{
-		ptTmp = s_ptDispOprHead;
-		while (ptTmp->ptNext)
-		{
-			ptTmp = ptTmp->ptNext;
-		}
-		ptTmp->ptNext	  = ptDispOpr;
-		ptDispOpr->ptNext = NULL;
-	}
+    if (!g_ptDispOprHead)
+    {
+        g_ptDispOprHead   = ptDispOpr;
+        ptDispOpr->ptNext = NULL;
+    }
+    else
+    {
+        ptTmp = g_ptDispOprHead;
+        while (ptTmp->ptNext)
+        {
+            ptTmp = ptTmp->ptNext;
+        }
+        ptTmp->ptNext	  = ptDispOpr;
+        ptDispOpr->ptNext = NULL;
+    }
 
-	return 0;
+    return 0;
 }
 
-/* 显示支持拓展文件的名字 */
+
+/**********************************************************************
+ * 函数名称： ShowDispOpr
+ * 功能描述： 显示本程序能支持的"显示模块"
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 void ShowDispOpr(void)
 {
-	int i = 0;
-	PT_DispOpr ptTmp = s_ptDispOprHead;
+    int i = 0;
+    PT_DispOpr ptTmp = g_ptDispOprHead;
 
-	while (ptTmp)
-	{
-		printf("%02d %s\n", i++, ptTmp->name);
-		ptTmp = ptTmp->ptNext;
-	}
+    while (ptTmp)
+    {
+        printf("%02d %s\n", i++, ptTmp->name);
+        ptTmp = ptTmp->ptNext;
+    }
 }
 
-/* 获取指定的名字的拓展文件 */
-PT_DispOpr GetDispOpr(char *pName)
+/**********************************************************************
+ * 函数名称： GetDispOpr
+ * 功能描述： 根据名字取出指定的"显示模块"
+ * 输入参数： pcName - 名字
+ * 输出参数： 无
+ * 返 回 值： NULL   - 失败,没有指定的模块,
+ *            非NULL - 显示模块的PT_DispOpr结构体指针
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+PT_DispOpr GetDispOpr(char *pcName)
 {
-	PT_DispOpr ptTmp = s_ptDispOprHead;
-	
-	while (ptTmp) {
-		if (strcmp(ptTmp->name, pName) == 0)
-			return ptTmp;
-			
-		ptTmp = ptTmp->ptNext;
-	}
-	
-	return NULL;
+    PT_DispOpr ptTmp = g_ptDispOprHead;
+
+    while (ptTmp)
+    {
+        if (strcmp(ptTmp->name, pcName) == 0)
+        {
+            return ptTmp;
+        }
+        ptTmp = ptTmp->ptNext;
+    }
+    return NULL;
 }
 
-//选择一个显示设备，并初始化，然后清屏  --与Default相关都是该设备
+/**********************************************************************
+ * 函数名称： SelectAndInitDefaultDispDev
+ * 功能描述： 根据名字取出指定的"显示模块", 调用它的初始化函数, 并且清屏
+ * 输入参数： name - 名字
+ * 输出参数： 无
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 void SelectAndInitDefaultDispDev(char *name)
 {
-	s_ptDefaultDispOpr = GetDispOpr(name);
-	if (s_ptDefaultDispOpr == NULL) {
-		DebugPrint(APP_ERR"s_ptDefaultDispOpr is NULL! File:%s Line:%d\n", __FILE__, __LINE__);
-		return ;
-	}
-
-	s_ptDefaultDispOpr->DeviceInit();
-	s_ptDefaultDispOpr->CleanScreen(0);
+    g_ptDefaultDispOpr = GetDispOpr(name);
+    if (g_ptDefaultDispOpr)
+    {
+        g_ptDefaultDispOpr->DeviceInit();
+        g_ptDefaultDispOpr->CleanScreen(0);
+    }
 }
 
-//找到device显存，因为插入显存是头插法，因此device的在最后面
-PT_VideoMem GetDevVideoMem(void)
-{
-	PT_VideoMem ptTmp = s_ptVieoMemHead;
-	
-	while (ptTmp)
-	{
-		if (ptTmp->isDevFB)
-		{
-			return ptTmp;
-		}
-		ptTmp = ptTmp->ptNext;
-	}
-	return NULL;
-}
-
+/**********************************************************************
+ * 函数名称： GetDefaultDispDev
+ * 功能描述： 程序事先用SelectAndInitDefaultDispDev选择了显示模块,
+ *            本函数返回该显示模块
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 显示模块的PT_DispOpr结构体指针
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 PT_DispOpr GetDefaultDispDev(void)
 {
-	return s_ptDefaultDispOpr;
+    return g_ptDefaultDispOpr;
 }
 
-/**
- * @Description: 获得正在使用的显示设备的分辨率与bpp
- * @param pXres - x分辨率, pYres - y分辨率
- * @return 0
- */
-int GetDispResolution(int *pXres, int *pYres, int *pbpp)
+/**********************************************************************
+ * 函数名称： GetDispResolution
+ * 功能描述： 获得所使用的显示设备的分辨率和BPP
+ * 输入参数： 无
+ * 输出参数： piXres - 存X分辨率
+ *            piYres - 存X分辨率
+ *            piBpp  - 存BPP
+ * 返 回 值： 0  - 成功
+ *            -1 - 失败(未使用SelectAndInitDefaultDispDev来选择显示模块)
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+int GetDispResolution(int *piXres, int *piYres, int *piBpp)
 {
-	if (s_ptDefaultDispOpr) {
-		*pXres = s_ptDefaultDispOpr->Xres;
-		*pYres = s_ptDefaultDispOpr->Yres;
-		*pbpp  = s_ptDefaultDispOpr->Bpp;
-		return 0;
-	} else
-		return -1;
-}
-
-/**
- * @Description: 为每个页面分配内存，后续用来刷新/加载到显存中
- * @param num - 需分配内存块的数量，当num为0，只描述设备本身Framebuffer信息不进行内存申请
- * @return 0 - 成功，-1 - 失败
- */
-int AllocVideoMem(int num)
-{
-	int i;
-	int bpp;
-	int linebytes;
-	int xres, yres;
-	int VMSize;
-	PT_VideoMem ptNew;
-	PT_VideoMem ptTmp;
-
-	bpp = yres = xres = 0;
-	
-	GetDispResolution(&xres, &yres, &bpp);
-	VMSize    = xres * yres * bpp / 8;
-	linebytes = xres * bpp / 8;
-	
-	/* 1、先把设备本身的Framebuffer放入链表 */
-	ptNew = (PT_VideoMem)malloc(sizeof(T_VideoMem));
-	if (ptNew == NULL) {
-		DebugPrint(APP_ERR"Framebuffer set fail!\n");
-		goto fail;
-	}
-
-	/* 设置该内存所描述页面的信息 */
-	ptNew->id 					  = 0;
-	ptNew->isDevFB 				  = 1;  //当前页面是直接放入framebuffer,也就是lcd直接显示  isDeviceFramebuffer,是否为framebuffer
-	ptNew->eVideoMemState         = VMS_FREE;
-	ptNew->ePicState              = PS_BLANK;
-	ptNew->tPixelDatas.bpp        = bpp;
-	ptNew->tPixelDatas.height     = yres;
-	ptNew->tPixelDatas.width      = xres;
-	ptNew->tPixelDatas.linebytes  = linebytes;		
-	ptNew->tPixelDatas.PixelDatas = s_ptDefaultDispOpr->pDispMem;
-	ptNew->tPixelDatas.TotalBytes = VMSize;
-
-	/* 强制设置设备本身的Framebuffer状态为被占用 */
-	if (num != 0)
-		ptNew->eVideoMemState = VMS_USED_FOR_CURMAIN;
-
-	/* 头插法插入链表 */
-	ptNew->ptNext = s_ptVieoMemHead;
-	s_ptVieoMemHead = ptNew;
-
-	/* 2、后分配用于页面管理的内存并设置结构体，组成：页面描述 + 显存 */
-	for (i = 0; i < num; i++) {
-		ptNew = (PT_VideoMem)malloc(sizeof(T_VideoMem) + VMSize);
-		if (ptNew == NULL) {
-			DebugPrint(APP_ERR"ptNew malloc fail，already malloc num: %d!\n", i);
-			goto fail;
-		}
-
-		/* 设置该内存所描述页面的信息 */ //
-		ptNew->id 					  = 0; 
-		ptNew->isDevFB 				  = 0; //后续都是放在内存中，如果num=0,也就是所有的都在framebuffer操作，因为有些设备内存很小。
-		ptNew->eVideoMemState         = VMS_FREE;
-		ptNew->ePicState              = PS_BLANK;
-		ptNew->tPixelDatas.bpp        = bpp;
-		ptNew->tPixelDatas.height     = yres;
-		ptNew->tPixelDatas.width      = xres;
-		ptNew->tPixelDatas.linebytes  = linebytes;		
-		ptNew->tPixelDatas.PixelDatas = (unsigned char *)(ptNew + 1); //结构体指针+1，指加上该结构体的大小  
-		ptNew->tPixelDatas.TotalBytes = VMSize;
-
-		/* 头插法插入链表 */
-		ptNew->ptNext = s_ptVieoMemHead;
-		s_ptVieoMemHead = ptNew;
-	}
-
-	return 0;
-	
-fail:
-	while (s_ptVieoMemHead) {
-		ptTmp = s_ptVieoMemHead->ptNext;
-		free(s_ptVieoMemHead);
-		s_ptVieoMemHead = ptTmp;
-	}
-
-	return -1;
-}
-
-/**
- * @Description: 根据id获得对应的页面内存，后续用来刷新/加载到显存中
- * @param id - 页面内存对应的id, isCurMain - 是否给当前主线程使用：
- *									1-是，0-给对应页面的prepare线程使用
- * @return ptTmp - 满足要求的节点，NULL - 无满足要求的节点
- */
-// 主要情况有，1.输入ID存在，则提取该显存数据，确定是主线程需要还是子线程需要 2.输入ID不存在，则为新数据，找到空闲显存（此时数据也为空，方便注入）
-//  3.如果找不到空闲的且为空的数据，那么没办法，找到一个空闲的显存，但是已有数据，只能选择将原有数据覆盖（也就是预先分配的内存有限，只能供优先的使用）
-PT_VideoMem GetVideoMem(int id, int isCurMain) 
-{
-	PT_VideoMem ptTmp = s_ptVieoMemHead;
-
-	/* 1. 优先: 取出空闲的、ID相同的videomem */
-	while (ptTmp)
-	{
-		if ((ptTmp->eVideoMemState == VMS_FREE) && (ptTmp->id == id))
-		{
-			ptTmp->eVideoMemState = isCurMain ? VMS_USED_FOR_CURMAIN : VMS_USED_FOR_PREPARE;
-			return ptTmp;
-		}
-		ptTmp = ptTmp->ptNext;
-	}
-
-	/* 2. 如果前面不成功, 取出一个空闲的并且ptVideoMem->ePicState = PS_BLANK的videomem */
-	ptTmp = s_ptVieoMemHead;
-	while (ptTmp)
-	{
-		if ((ptTmp->eVideoMemState == VMS_FREE) && (ptTmp->ePicState == PS_BLANK))
-		{
-			ptTmp->id = id;
-			ptTmp->eVideoMemState = isCurMain ? VMS_USED_FOR_CURMAIN : VMS_USED_FOR_PREPARE;
-			return ptTmp;
-		}
-		ptTmp = ptTmp->ptNext;
-	}	
-	
-	/* 3. 如果前面不成功: 取出任意一个空闲的videomem */
-	ptTmp = s_ptVieoMemHead;
-	while (ptTmp)
-	{
-		if (ptTmp->eVideoMemState == VMS_FREE)
-		{
-			ptTmp->id = id;
-			ptTmp->ePicState = PS_BLANK;
-			ptTmp->eVideoMemState = isCurMain ? VMS_USED_FOR_CURMAIN : VMS_USED_FOR_PREPARE;
-			return ptTmp;
-		}
-		ptTmp = ptTmp->ptNext;
-	}
-
-    /* 4. 如果没有空闲的videomem并且isCurMain为1, 则取出任意一个videomem(不管它是否空闲) */
-    if (isCurMain)
+    if (g_ptDefaultDispOpr)
     {
-    	ptTmp = s_ptVieoMemHead;
-    	ptTmp->id = id;
-    	ptTmp->ePicState = PS_BLANK;
-    	ptTmp->eVideoMemState = isCurMain ? VMS_USED_FOR_CURMAIN : VMS_USED_FOR_PREPARE;
-    	return ptTmp;
+        *piXres = g_ptDefaultDispOpr->iXres;
+        *piYres = g_ptDefaultDispOpr->iYres;
+        *piBpp  = g_ptDefaultDispOpr->iBpp;
+        return 0;
     }
-    
-	return NULL;
-}
-
-/**
- * @Description: 设置对应节点的内存为空闲状态
- * @param ptVideoMem - 需要设置的节点
- */
-void PutVideoMem(PT_VideoMem ptVideoMem)
-{
-	ptVideoMem->eVideoMemState = VMS_FREE;
-    if (ptVideoMem->id == -1)
+    else
     {
-        ptVideoMem->ePicState = PS_BLANK;
+        return -1;
     }
 }
 
-
-/**
- * @Description: 清屏函数  传入页面 tPixelDatas设置即可。
- * @param ptVideoMem - 需要设置的节点
- */
-void ClearVideoMem(PT_VideoMem ptVideoMem, unsigned int color)
+/**********************************************************************
+ * 函数名称： AllocVideoMem
+ * 功能描述： VideoMem: 为加快显示速度,我们事先在缓存中构造好显示的页面的数据,
+ *            (这个缓存称为VideoMem)
+ *            显示时再把VideoMem中的数据复制到设备的显存上
+ * 输入参数： iNum
+ * 输出参数： 无
+ * 返 回 值： 0  - 成功
+ *            -1 - 失败(未使用SelectAndInitDefaultDispDev来选择显示模块)
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+int AllocVideoMem(int iNum)
 {
-	int i;
-	unsigned char  *pPen8;
-	unsigned short *pPen16;
-	unsigned int   *pPen32;
-	unsigned int 	color16bpp;
-	unsigned int	red, green, blue;
-
-	pPen8  = ptVideoMem->tPixelDatas.PixelDatas;
-	pPen16 = (unsigned short *)pPen8;
-	pPen32 = (unsigned int   *)pPen8;
-
-	switch (ptVideoMem->tPixelDatas.bpp) {
-	case 8:
-		memset(pPen8, color, ptVideoMem->tPixelDatas.TotalBytes);
-		break;
-	case 16:
-		/* RGB:565 */
-		red      = ((color >> 16) & 0xffff) >> 3;
-		green    = ((color >> 8 )  & 0xffff) >> 2;
-		blue     = ((color >> 0 )  & 0xffff) >> 3;
-		color16bpp    = (red << 11) | (green << 5) | blue;
-		
-		for (i = 0; i < ptVideoMem->tPixelDatas.TotalBytes;) {
-			*pPen16 = color16bpp;
-			pPen16++;
-			i += 2;
-		}
-		break;
-	case 32:
-		for (i = 0; i < ptVideoMem->tPixelDatas.TotalBytes;) {
-			*pPen32 = color;
-			pPen32++;
-			i += 4;
-		}
-		break;
-	default:
-		DBG_PRINTF("can not surport %dbpp\n", ptVideoMem->tPixelDatas.bpp);
-		break;
-	}
-
-}
-
-/* 把显存中某区域全部清为某种颜色 */  
-// ptVideoMem 页面 ptLayout 区域 功能为将页面某一区域设置一个颜色。
-void ClearVideoMemRegion(PT_VideoMem ptVideoMem, PT_Layout ptLayout, unsigned int dwColor)
-{
-	unsigned char *pucVM;
-	unsigned short *pwVM16bpp;
-	unsigned int *pdwVM32bpp;
-	unsigned short wColor16bpp; /* 565 */
-	int iRed;
-	int iGreen;
-	int iBlue;
-	int iX;
-	int iY;
-    int linebytesClear;
     int i;
 
-	pucVM	   = ptVideoMem->tPixelDatas.PixelDatas + ptLayout->TopLeftY * ptVideoMem->tPixelDatas.linebytes + ptLayout->TopLeftX * ptVideoMem->tPixelDatas.bpp / 8;
-	pwVM16bpp  = (unsigned short *)pucVM;
-	pdwVM32bpp = (unsigned int *)pucVM;
+    int iXres = 0;
+    int iYres = 0;
+    int iBpp  = 0;
 
-    linebytesClear = (ptLayout->BotRightX - ptLayout->TopLeftX + 1) * ptVideoMem->tPixelDatas.bpp / 8;
+    int iVMSize;
+    int iLineBytes;
 
-	switch (ptVideoMem->tPixelDatas.bpp)
-	{
-		case 8:
-		{
-            for (iY = ptLayout->TopLeftY; iY <= ptLayout->BotRightY; iY++)
+    PT_VideoMem ptNew;
+
+    /* 确定VideoMem的大小
+     */
+    GetDispResolution(&iXres, &iYres, &iBpp);
+    iVMSize = iXres * iYres * iBpp / 8;
+    iLineBytes = iXres * iBpp / 8;
+
+    /* 先把设备本身的framebuffer放入链表
+     * 分配一个T_VideoMem结构体, 注意我们没有分配里面的tPixelDatas.aucPixelDatas
+     * 而是让tPixelDatas.aucPixelDatas指向显示设备的framebuffer
+     */
+    ptNew = malloc(sizeof(T_VideoMem));
+    if (ptNew == NULL)
+    {
+        return -1;
+    }
+
+    /* 指向framebuffer */
+    ptNew->tPixelDatas.aucPixelDatas = g_ptDefaultDispOpr->pucDispMem;
+
+    ptNew->iID = 0;
+    ptNew->bDevFrameBuffer = 1;        /* 表示这个VideoMem是设备本身的framebuffer, 而不是用作缓存作用的VideoMem */
+    ptNew->eVideoMemState  = VMS_FREE;
+    ptNew->ePicState	   = PS_BLANK;
+    ptNew->tPixelDatas.iWidth  = iXres;
+    ptNew->tPixelDatas.iHeight = iYres;
+    ptNew->tPixelDatas.iBpp    = iBpp;
+    ptNew->tPixelDatas.iLineBytes  = iLineBytes;
+    ptNew->tPixelDatas.iTotalBytes = iVMSize;
+
+    if (iNum != 0)
+    {
+        /* 如果下面要分配用于缓存的VideoMem,
+         * 把设备本身framebuffer对应的VideoMem状态设置为VMS_USED_FOR_CUR,
+         * 表示这个VideoMem不会被作为缓存分配出去
+         */
+        ptNew->eVideoMemState = VMS_USED_FOR_CUR;
+    }
+
+    /* 放入链表 */
+    ptNew->ptNext = g_ptVideoMemHead;
+    g_ptVideoMemHead = ptNew;
+
+
+    /*
+     * 分配用于缓存的VideoMem
+     */
+    for (i = 0; i < iNum; i++)
+    {
+        /* 分配T_VideoMem结构体本身和"跟framebuffer同样大小的缓存" */
+        ptNew = malloc(sizeof(T_VideoMem) + iVMSize);
+        if (ptNew == NULL)
+        {
+            return -1;
+        }
+        /* 在T_VideoMem结构体里记录上面分配的"跟framebuffer同样大小的缓存" */
+        ptNew->tPixelDatas.aucPixelDatas = (unsigned char *)(ptNew + 1);
+
+        ptNew->iID = 0;
+        ptNew->bDevFrameBuffer = 0;
+        ptNew->eVideoMemState = VMS_FREE;
+        ptNew->ePicState      = PS_BLANK;
+        ptNew->tPixelDatas.iWidth  = iXres;
+        ptNew->tPixelDatas.iHeight = iYres;
+        ptNew->tPixelDatas.iBpp    = iBpp;
+        ptNew->tPixelDatas.iLineBytes = iLineBytes;
+        ptNew->tPixelDatas.iTotalBytes = iVMSize;
+
+        /* 放入链表 */
+        ptNew->ptNext = g_ptVideoMemHead;
+        g_ptVideoMemHead = ptNew;
+    }
+
+    return 0;
+}
+
+/**********************************************************************
+ * 函数名称： GetVideoMem
+ * 功能描述： 获得一块可操作的VideoMem(它用于存储要显示的数据),
+ *            用完后用PutVideoMem来释放
+ * 输入参数： iID  - ID值,先尝试在众多VideoMem中找到ID值相同的
+ *            bCur - 1表示当前程序马上要使用VideoMem,无法如何都要返回一个VideoMem
+ *                   0表示这是为了改进性能而提前取得VideoMem,不是必需的
+ * 输出参数： 无
+ * 返 回 值： NULL   - 失败,没有可用的VideoMem
+ *            非NULL - 成功,返回PT_VideoMem结构体
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+PT_VideoMem GetVideoMem(int iID, int bCur)
+{
+    PT_VideoMem ptTmp = g_ptVideoMemHead;
+
+    /* 1. 优先: 取出空闲的、ID相同的videomem */
+    while (ptTmp)
+    {
+        if ((ptTmp->eVideoMemState == VMS_FREE) && (ptTmp->iID == iID))
+        {
+            ptTmp->eVideoMemState = bCur ? VMS_USED_FOR_CUR : VMS_USED_FOR_PREPARE;
+            return ptTmp;
+        }
+        ptTmp = ptTmp->ptNext;
+    }
+
+    /* 2. 如果前面不成功, 取出一个空闲的并且里面没有数据(ptVideoMem->ePicState = PS_BLANK)的VideoMem */
+    ptTmp = g_ptVideoMemHead;
+    while (ptTmp)
+    {
+        if ((ptTmp->eVideoMemState == VMS_FREE) && (ptTmp->ePicState == PS_BLANK))
+        {
+            ptTmp->iID = iID;
+            ptTmp->eVideoMemState = bCur ? VMS_USED_FOR_CUR : VMS_USED_FOR_PREPARE;
+            return ptTmp;
+        }
+        ptTmp = ptTmp->ptNext;
+    }
+
+    /* 3. 如果前面不成功: 取出任意一个空闲的VideoMem */
+    ptTmp = g_ptVideoMemHead;
+    while (ptTmp)
+    {
+        if (ptTmp->eVideoMemState == VMS_FREE)
+        {
+            ptTmp->iID = iID;
+            ptTmp->ePicState = PS_BLANK;
+            ptTmp->eVideoMemState = bCur ? VMS_USED_FOR_CUR : VMS_USED_FOR_PREPARE;
+            return ptTmp;
+        }
+        ptTmp = ptTmp->ptNext;
+    }
+
+    /* 4. 如果没有空闲的VideoMem并且bCur为1, 则取出任意一个VideoMem(不管它是否空闲) */
+    if (bCur)
+    {
+        ptTmp = g_ptVideoMemHead;
+        ptTmp->iID = iID;
+        ptTmp->ePicState = PS_BLANK;
+        ptTmp->eVideoMemState = bCur ? VMS_USED_FOR_CUR : VMS_USED_FOR_PREPARE;
+        return ptTmp;
+    }
+
+    return NULL;
+}
+
+/**********************************************************************
+ * 函数名称： PutVideoMem
+ * 功能描述： 使用GetVideoMem获得的VideoMem, 用完时用PutVideoMem释放掉
+ * 输入参数： ptVideoMem - 使用完毕的VideoMem
+ * 输出参数： 无
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+void PutVideoMem(PT_VideoMem ptVideoMem)
+{
+    ptVideoMem->eVideoMemState = VMS_FREE;  /* 设置VideoMem状态为空闲 */
+    if (ptVideoMem->iID == -1)
+    {
+        ptVideoMem->ePicState = PS_BLANK;  /* 表示里面的数据没有用了 */
+    }
+}
+
+/**********************************************************************
+ * 函数名称： GetDevVideoMem
+ * 功能描述： 获得显示设备的显存, 在该显存上操作就可以直接在LCD上显示出来
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 显存对应的VideoMem结构体指针
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+PT_VideoMem GetDevVideoMem(void)
+{
+    PT_VideoMem ptTmp = g_ptVideoMemHead;
+
+    while (ptTmp)
+    {
+        if (ptTmp->bDevFrameBuffer)
+        {
+            return ptTmp;
+        }
+        ptTmp = ptTmp->ptNext;
+    }
+    return NULL;
+}
+
+
+/**********************************************************************
+ * 函数名称： ClearVideoMem
+ * 功能描述： 把VideoMem中内存全部清为某种颜色
+ * 输入参数： ptVideoMem - VideoMem结构体指针, 内含要操作的内存
+ *            dwColor    - 设置为该颜色
+ * 输出参数： 无
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+void ClearVideoMem(PT_VideoMem ptVideoMem, unsigned int dwColor)
+{
+    unsigned char *pucVM;
+    unsigned short *pwVM16bpp;
+    unsigned int *pdwVM32bpp;
+    unsigned short wColor16bpp; /* 565 */
+    int iRed;
+    int iGreen;
+    int iBlue;
+    int i = 0;
+
+    pucVM	   = ptVideoMem->tPixelDatas.aucPixelDatas;
+    pwVM16bpp  = (unsigned short *)pucVM;
+    pdwVM32bpp = (unsigned int *)pucVM;
+
+    switch (ptVideoMem->tPixelDatas.iBpp)
+    {
+        case 8:
+        {
+            memset(pucVM, dwColor, ptVideoMem->tPixelDatas.iTotalBytes);
+            break;
+        }
+        case 16:
+        {
+            /* 先根据32位的dwColor构造出16位的wColor16bpp */
+            iRed   = (dwColor >> (16+3)) & 0x1f;
+            iGreen = (dwColor >> (8+2)) & 0x3f;
+            iBlue  = (dwColor >> 3) & 0x1f;
+            wColor16bpp = (iRed << 11) | (iGreen << 5) | iBlue;
+            while (i < ptVideoMem->tPixelDatas.iTotalBytes)
             {
-    			memset(pucVM, dwColor, linebytesClear);
-                pucVM += ptVideoMem->tPixelDatas.linebytes;
+                *pwVM16bpp	= wColor16bpp;
+                pwVM16bpp++;
+                i += 2;
             }
-			break;
-		}
-		case 16:
-		{
-			iRed   = (dwColor >> (16+3)) & 0x1f;
-			iGreen = (dwColor >> (8+2)) & 0x3f;
-			iBlue  = (dwColor >> 3) & 0x1f;
-			wColor16bpp = (iRed << 11) | (iGreen << 5) | iBlue;
-            for (iY = ptLayout->TopLeftY; iY <= ptLayout->BotRightY; iY++)
+            break;
+        }
+        case 32:
+        {
+            while (i < ptVideoMem->tPixelDatas.iTotalBytes)
             {
-                i = 0;
-                for (iX = ptLayout->TopLeftX; iX <= ptLayout->BotRightX; iX++)
-    			{
-    				pwVM16bpp[i++]	= wColor16bpp;
-    			}
-                pwVM16bpp = (unsigned short *)((unsigned int)pwVM16bpp + ptVideoMem->tPixelDatas.linebytes);
+                *pdwVM32bpp = dwColor;
+                pdwVM32bpp++;
+                i += 4;
             }
-			break;
-		}
-		case 32:
-		{
-            for (iY = ptLayout->TopLeftY; iY <= ptLayout->BotRightY; iY++)
-            {
-                i = 0;
-                for (iX = ptLayout->TopLeftX; iX <= ptLayout->BotRightX; iX++)
-    			{
-    				pdwVM32bpp[i++]	= dwColor;
-    			}
-                pdwVM32bpp = (unsigned int *)((unsigned int)pdwVM32bpp + ptVideoMem->tPixelDatas.linebytes);
-            }
-			break;
-		}
-		default :
-		{
-			DBG_PRINTF("can't support %d bpp\n", ptVideoMem->tPixelDatas.bpp);
-			return;
-		}
-	}
+            break;
+        }
+        default :
+        {
+            DBG_PRINTF("can't support %d bpp\n", ptVideoMem->tPixelDatas.iBpp);
+            return;
+        }
+    }
 
 }
 
-/* 初始化函数 */
+
+/**********************************************************************
+ * 函数名称： ClearVideoMemRegion
+ * 功能描述： 把VideoMem中内存的指定区域全部清为某种颜色
+ * 输入参数： ptVideoMem - VideoMem结构体指针, 内含要操作的内存
+ *            ptLayout   - 矩形区域, 指定了左上角,右在角的坐标
+ *            dwColor    - 设置为该颜色
+ * 输出参数： 无
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+void ClearVideoMemRegion(PT_VideoMem ptVideoMem, PT_Layout ptLayout, unsigned int dwColor)
+{
+    unsigned char *pucVM;
+    unsigned short *pwVM16bpp;
+    unsigned int *pdwVM32bpp;
+    unsigned short wColor16bpp; /* 565 */
+    int iRed;
+    int iGreen;
+    int iBlue;
+    int iX;
+    int iY;
+    int iLineBytesClear;
+    int i;
+
+    pucVM	   = ptVideoMem->tPixelDatas.aucPixelDatas + ptLayout->iTopLeftY * ptVideoMem->tPixelDatas.iLineBytes + ptLayout->iTopLeftX * ptVideoMem->tPixelDatas.iBpp / 8;
+    pwVM16bpp  = (unsigned short *)pucVM;
+    pdwVM32bpp = (unsigned int *)pucVM;
+
+    iLineBytesClear = (ptLayout->iBotRightX - ptLayout->iTopLeftX + 1) * ptVideoMem->tPixelDatas.iBpp / 8;
+
+    switch (ptVideoMem->tPixelDatas.iBpp)
+    {
+        case 8:
+        {
+            for (iY = ptLayout->iTopLeftY; iY <= ptLayout->iBotRightY; iY++)
+            {
+                memset(pucVM, dwColor, iLineBytesClear);
+                pucVM += ptVideoMem->tPixelDatas.iLineBytes;
+            }
+            break;
+        }
+        case 16:
+        {
+            /* 先根据32位的dwColor构造出16位的wColor16bpp */
+            iRed   = (dwColor >> (16+3)) & 0x1f;
+            iGreen = (dwColor >> (8+2)) & 0x3f;
+            iBlue  = (dwColor >> 3) & 0x1f;
+            wColor16bpp = (iRed << 11) | (iGreen << 5) | iBlue;
+            for (iY = ptLayout->iTopLeftY; iY <= ptLayout->iBotRightY; iY++)
+            {
+                i = 0;
+                for (iX = ptLayout->iTopLeftX; iX <= ptLayout->iBotRightX; iX++)
+                {
+                    pwVM16bpp[i++]	= wColor16bpp;
+                }
+                pwVM16bpp = (unsigned short *)((unsigned int)pwVM16bpp + ptVideoMem->tPixelDatas.iLineBytes);
+            }
+            break;
+        }
+        case 32:
+        {
+            for (iY = ptLayout->iTopLeftY; iY <= ptLayout->iBotRightY; iY++)
+            {
+                i = 0;
+                for (iX = ptLayout->iTopLeftX; iX <= ptLayout->iBotRightX; iX++)
+                {
+                    pdwVM32bpp[i++]	= dwColor;
+                }
+                pdwVM32bpp = (unsigned int *)((unsigned int)pdwVM32bpp + ptVideoMem->tPixelDatas.iLineBytes);
+            }
+            break;
+        }
+        default :
+        {
+            DBG_PRINTF("can't support %d bpp\n", ptVideoMem->tPixelDatas.iBpp);
+            return;
+        }
+    }
+
+}
+
+/**********************************************************************
+ * 函数名称： DisplayInit
+ * 功能描述： 注册显示设备
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 int DisplayInit(void)
 {
-	int error;
-	
-	error = FBInit();
+    int iError;
 
-	return error;
+    iError = FBInit();
+
+    return iError;
 }
-

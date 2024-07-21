@@ -10,434 +10,535 @@
 
 #define SLIP_MIN_DISTANCE (2*2)
 
+
 /* 菜单的区域 */
-static T_Layout s_atManualMenuIconsLayout[] = {
-	{"return.bmp", 0, 0, 0, 0},
-	{"zoomout.bmp", 0, 0, 0, 0},
-	{"zoomin.bmp", 0, 0, 0, 0},
-	{"pre_pic.bmp", 0, 0, 0, 0},
-    {"next_pic.bmp", 0, 0, 0, 0},
-    {"continue_mod_small.bmp", 0, 0, 0, 0},
-	{NULL, 0, 0, 0, 0},
+static T_Layout g_atManualMenuIconsLayout[] = {
+    {0, 0, 0, 0, "return.bmp"},
+    {0, 0, 0, 0, "zoomout.bmp"},
+    {0, 0, 0, 0, "zoomin.bmp"},
+    {0, 0, 0, 0, "pre_pic.bmp"},
+    {0, 0, 0, 0, "next_pic.bmp"},
+    {0, 0, 0, 0, "continue_mod_small.bmp"},
+    {0, 0, 0, 0, NULL},
 };
 
-static T_PageLayout s_tManualPageMenuIconsLayout = {
-	.MaxTotalBytes = 0,
-	.ptLayout       = s_atManualMenuIconsLayout,
+static T_PageLayout g_tManualPageMenuIconsLayout = {
+    .iMaxTotalBytes = 0,
+    .atLayout       = g_atManualMenuIconsLayout,
 };
+
+static T_Layout g_tManualPictureLayout;
+
+static T_PixelDatas g_tOriginPicPixelDatas;
+static T_PixelDatas g_tZoomedPicPixelDatas;
 
 /* 显示在LCD上的图片, 它的中心点, 在g_tZoomedPicPixelDatas里的坐标 */
-static int g_iXofZoomedPicShowInCenter;  
+static int g_iXofZoomedPicShowInCenter;
 static int g_iYofZoomedPicShowInCenter;
 
-static T_Layout s_tManualPictureLayout;
 
-static T_PixelDatas s_tOriginPicPixelDatas;
-static T_PixelDatas s_tZoomedPicPixelDatas;
-
-/* 计算菜单中各图标坐标值 */
+/**********************************************************************
+ * 函数名称： CalcManualPageMenusLayout
+ * 功能描述： 计算页面中各图标座标值
+ * 输入参数： 无
+ * 输出参数： ptPageLayout - 内含各图标的左上角/右下角座标值
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static void  CalcManualPageMenusLayout(PT_PageLayout ptPageLayout)
 {
-	int width;
-	int height;
-	int xres, yres, bpp;
-	int TmpTotalBytes;
-	PT_Layout ptLayout;
-	int i;
+    int iWidth;
+    int iHeight;
+    int iXres, iYres, iBpp;
+    int iTmpTotalBytes;
+    PT_Layout atLayout;
+    int i;
 
-	ptLayout = ptPageLayout->ptLayout;
-	GetDispResolution(&xres, &yres, &bpp);
-	ptPageLayout->bpp = bpp;
+    atLayout = ptPageLayout->atLayout;
+    GetDispResolution(&iXres, &iYres, &iBpp);
+    ptPageLayout->iBpp = iBpp;
 
-	if (xres < yres)
-	{			 
-		/*	 xres/6
-		 *	  --------------------------------------------------------------
-		 *	   return	zoomout	zoomin  pre_pic next_pic continue_mod_small
-		 *
-		 *
-		 *
-		 *
-		 *
-		 *
-		 *	  --------------------------------------------------------------
-		 */
-		 
-		width  = xres / 6;
-		height = width;
+    if (iXres < iYres)
+    {
+        /*	 iXres/6
+         *	  --------------------------------------------------------------
+         *	   return	zoomout	zoomin  pre_pic next_pic continue_mod_small
+         *
+         *
+         *
+         *
+         *
+         *
+         *	  --------------------------------------------------------------
+         */
 
-		/* return图标 */
-		ptLayout[0].TopLeftY  = 0;
-		ptLayout[0].BotRightY = ptLayout[0].TopLeftY + height - 1;
-		ptLayout[0].TopLeftX  = 0;
-		ptLayout[0].BotRightX = ptLayout[0].TopLeftX + width - 1;
+        iWidth  = iXres / 6;
+        iHeight = iWidth;
+
+        /* return图标 */
+        atLayout[0].iTopLeftY  = 0;
+        atLayout[0].iBotRightY = atLayout[0].iTopLeftY + iHeight - 1;
+        atLayout[0].iTopLeftX  = 0;
+        atLayout[0].iBotRightX = atLayout[0].iTopLeftX + iWidth - 1;
 
         /* 其他5个图标 */
         for (i = 1; i < 6; i++)
         {
-    		ptLayout[i].TopLeftY  = 0;
-    		ptLayout[i].BotRightY = ptLayout[i].TopLeftY + height - 1;
-    		ptLayout[i].TopLeftX  = ptLayout[i-1].BotRightX + 1;
-    		ptLayout[i].BotRightX = ptLayout[i].TopLeftX + width - 1;
+            atLayout[i].iTopLeftY  = 0;
+            atLayout[i].iBotRightY = atLayout[i].iTopLeftY + iHeight - 1;
+            atLayout[i].iTopLeftX  = atLayout[i-1].iBotRightX + 1;
+            atLayout[i].iBotRightX = atLayout[i].iTopLeftX + iWidth - 1;
         }
 
-	}
-	else
-	{
-		/*	 yres/6
-		 *	  ----------------------------------
-		 *	   up		  
-		 *
-		 *    zoomout	    
-		 *
-		 *    zoomin
-		 *  
-		 *    pre_pic
-		 *
-		 *    next_pic
-		 *
-		 *    continue_mod_small
-		 *
-		 *	  ----------------------------------
-		 */
-		 
-		height  = yres / 6;
-		width = height;
+    }
+    else
+    {
+        /*	 iYres/6
+         *	  ----------------------------------
+         *	   up
+         *
+         *    zoomout
+         *
+         *    zoomin
+         *
+         *    pre_pic
+         *
+         *    next_pic
+         *
+         *    continue_mod_small
+         *
+         *	  ----------------------------------
+         */
 
-		/* return图标 */
-		ptLayout[0].TopLeftY  = 0;
-		ptLayout[0].BotRightY = ptLayout[0].TopLeftY + height - 1;
-		ptLayout[0].TopLeftX  = 0;
-		ptLayout[0].BotRightX = ptLayout[0].TopLeftX + width - 1;
-		
+        iHeight  = iYres / 6;
+        iWidth = iHeight;
+
+        /* return图标 */
+        atLayout[0].iTopLeftY  = 0;
+        atLayout[0].iBotRightY = atLayout[0].iTopLeftY + iHeight - 1;
+        atLayout[0].iTopLeftX  = 0;
+        atLayout[0].iBotRightX = atLayout[0].iTopLeftX + iWidth - 1;
+
         /* 其他5个图标 */
         for (i = 1; i < 6; i++)
         {
-    		ptLayout[i].TopLeftY  = ptLayout[i-1].BotRightY+ 1;
-    		ptLayout[i].BotRightY = ptLayout[i].TopLeftY + height - 1;
-    		ptLayout[i].TopLeftX  = 0;
-    		ptLayout[i].BotRightX = ptLayout[i].TopLeftX + width - 1;
-        }		
-	}
+            atLayout[i].iTopLeftY  = atLayout[i-1].iBotRightY+ 1;
+            atLayout[i].iBotRightY = atLayout[i].iTopLeftY + iHeight - 1;
+            atLayout[i].iTopLeftX  = 0;
+            atLayout[i].iBotRightX = atLayout[i].iTopLeftX + iWidth - 1;
+        }
+    }
 
-	i = 0;
-	while (ptLayout[i].strIconName)
-	{
-		TmpTotalBytes = (ptLayout[i].BotRightX - ptLayout[i].TopLeftX + 1) * (ptLayout[i].BotRightY - ptLayout[i].TopLeftY + 1) * bpp / 8;
-		if (ptPageLayout->MaxTotalBytes < TmpTotalBytes)
-		{
-			ptPageLayout->MaxTotalBytes = TmpTotalBytes;
-		}
-		i++;
-	}
+    i = 0;
+    while (atLayout[i].strIconName)
+    {
+        iTmpTotalBytes = (atLayout[i].iBotRightX - atLayout[i].iTopLeftX + 1) * (atLayout[i].iBotRightY - atLayout[i].iTopLeftY + 1) * iBpp / 8;
+        if (ptPageLayout->iMaxTotalBytes < iTmpTotalBytes)
+        {
+            ptPageLayout->iMaxTotalBytes = iTmpTotalBytes;
+        }
+        i++;
+    }
 }
 
 
-/* 计算图片的显示区域 */
+/**********************************************************************
+ * 函数名称： CalcManualPagePictureLayout
+ * 功能描述： 计算"manual页面"中"图片的显示区域"
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static void CalcManualPagePictureLayout(void)
 {
-	int xres, yres, bpp;
-	int TopLeftX, TopLeftY;
-	int BotRightX, BotRightY;
-	
-	GetDispResolution(&xres, &yres, &bpp);
+    int iXres, iYres, iBpp;
+    int iTopLeftX, iTopLeftY;
+    int iBotRightX, iBotRightY;
 
-	if (xres < yres)
-	{
-		/*	 xres/6
-		 *	  --------------------------------------------------------------
-		 *	   return	zoomout	zoomin  pre_pic next_pic continue_mod_small  (图标)
-		 *	  --------------------------------------------------------------
-		 *
-		 *                              图片
-		 *
-		 *
-		 *	  --------------------------------------------------------------
-		 */
-		TopLeftX  = 0;
-		BotRightX = xres - 1;
-		TopLeftY  = s_atManualMenuIconsLayout[0].BotRightY + 1;
-		BotRightY = yres - 1;
-	}
-	else
-	{
-		/*	 yres/6
-		 *	  --------------------------------------------------------------
-		 *	   up		         |
-		 *                       |
-		 *    zoomout	         |
-		 *                       |
-		 *    zoomin             |
-		 *                       |
-		 *    pre_pic            |                 图片
-		 *                       |
-		 *    next_pic           |
-		 *                       |
-		 *    continue_mod_small | 
-		 *                       |
-		 *	  --------------------------------------------------------------
-		 */
-		TopLeftX  = s_atManualMenuIconsLayout[0].BotRightX + 1;
-		BotRightX = xres - 1;
-		TopLeftY  = 0;
-		BotRightY = yres - 1;
-	}
+    GetDispResolution(&iXres, &iYres, &iBpp);
 
-    s_tManualPictureLayout.TopLeftX   = TopLeftX;
-    s_tManualPictureLayout.TopLeftY   = TopLeftY;
-    s_tManualPictureLayout.BotRightX  = BotRightX;
-    s_tManualPictureLayout.BotRightY  = BotRightY;
-    s_tManualPictureLayout.strIconName = NULL;
+    if (iXres < iYres)
+    {
+        /*	 iXres/6
+         *	  --------------------------------------------------------------
+         *	   return	zoomout	zoomin  pre_pic next_pic continue_mod_small  (图标)
+         *	  --------------------------------------------------------------
+         *
+         *                              图片
+         *
+         *
+         *	  --------------------------------------------------------------
+         */
+        iTopLeftX  = 0;
+        iBotRightX = iXres - 1;
+        iTopLeftY  = g_atManualMenuIconsLayout[0].iBotRightY + 1;
+        iBotRightY = iYres - 1;
+    }
+    else
+    {
+        /*	 iYres/6
+         *	  --------------------------------------------------------------
+         *	   up		         |
+         *                       |
+         *    zoomout	         |
+         *                       |
+         *    zoomin             |
+         *                       |
+         *    pre_pic            |                 图片
+         *                       |
+         *    next_pic           |
+         *                       |
+         *    continue_mod_small |
+         *                       |
+         *	  --------------------------------------------------------------
+         */
+        iTopLeftX  = g_atManualMenuIconsLayout[0].iBotRightX + 1;
+        iBotRightX = iXres - 1;
+        iTopLeftY  = 0;
+        iBotRightY = iYres - 1;
+    }
+
+    g_tManualPictureLayout.iTopLeftX   = iTopLeftX;
+    g_tManualPictureLayout.iTopLeftY   = iTopLeftY;
+    g_tManualPictureLayout.iBotRightX  = iBotRightX;
+    g_tManualPictureLayout.iBotRightY  = iBotRightY;
+    g_tManualPictureLayout.strIconName = NULL;
 }
 
 
-static PT_PixelDatas GetZoomedPicPixelDatas(PT_PixelDatas ptOriginPicPixelDatas, int iZoomedWidth, int iZoomedHeight)
-{
-    float k;
-	int iXres, iYres, bpp;
-    
-	GetDispResolution(&iXres, &iYres, &bpp);
-
-    if (s_tZoomedPicPixelDatas.PixelDatas)
-    {
-        free(s_tZoomedPicPixelDatas.PixelDatas);
-        s_tZoomedPicPixelDatas.PixelDatas = NULL;
-    }
-    
-    k = (float)ptOriginPicPixelDatas->height / ptOriginPicPixelDatas->width;
-    s_tZoomedPicPixelDatas.width  = iZoomedWidth;
-    s_tZoomedPicPixelDatas.height = iZoomedWidth * k;
-    if (s_tZoomedPicPixelDatas.height > iZoomedHeight)
-    {
-        s_tZoomedPicPixelDatas.width  = iZoomedHeight / k;
-        s_tZoomedPicPixelDatas.height = iZoomedHeight;
-    }
-    s_tZoomedPicPixelDatas.bpp        = bpp;
-    s_tZoomedPicPixelDatas.linebytes  = s_tZoomedPicPixelDatas.width * s_tZoomedPicPixelDatas.bpp / 8;
-    s_tZoomedPicPixelDatas.TotalBytes = s_tZoomedPicPixelDatas.linebytes * s_tZoomedPicPixelDatas.height;
-    s_tZoomedPicPixelDatas.PixelDatas = malloc(s_tZoomedPicPixelDatas.TotalBytes);
-    if (s_tZoomedPicPixelDatas.PixelDatas == NULL)
-    {
-        return NULL;
-    }
-    
-    PicZoom(ptOriginPicPixelDatas, &s_tZoomedPicPixelDatas);
-    return &s_tZoomedPicPixelDatas;
-}
-
+/**********************************************************************
+ * 函数名称： GetOriginPictureFilePixelDatas
+ * 功能描述： 获得图片文件的原始象素数据
+ * 输入参数： strFileName - 文件名(含绝对路径)
+ * 输出参数： 无
+ * 返 回 值： NULL   - 失败
+ *            非NULL - 一个PT_PixelDatas结构指针,内含图像象素数据
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static PT_PixelDatas GetOriginPictureFilePixelDatas(char *strFileName)
 {
     int iError;
 
-    if (s_tOriginPicPixelDatas.PixelDatas)
+    if (g_tOriginPicPixelDatas.aucPixelDatas)
     {
-        free(s_tOriginPicPixelDatas.PixelDatas);
-        s_tOriginPicPixelDatas.PixelDatas = NULL;
+        free(g_tOriginPicPixelDatas.aucPixelDatas);
+        g_tOriginPicPixelDatas.aucPixelDatas = NULL;
     }
-    
+
     /* 获得图片文件的数据 */
-    iError = GetPixelDatasFrmFile(strFileName, &s_tOriginPicPixelDatas);
+    iError = GetPixelDatasFrmFile(strFileName, &g_tOriginPicPixelDatas);
     if (iError)
     {
         return NULL;
     }
     else
     {
-        return &s_tOriginPicPixelDatas;
+        return &g_tOriginPicPixelDatas;
     }
 }
 
-/* 计算两个触点的距离, 为简化计算, 返回距离的平方值 */
-static int DistanceBetweenTwoPoint(PT_InputEvent ptInputEvent1, PT_InputEvent ptInputEvent2)
+
+/**********************************************************************
+ * 函数名称： GetZoomedPicPixelDatas
+ * 功能描述： 获得缩放后的图片象素数据
+ * 输入参数： strFileName - 文件名(含绝对路径)
+ * 输出参数： 无
+ * 返 回 值： NULL   - 失败
+ *            非NULL - 一个PT_PixelDatas结构指针,内含图像数据
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static PT_PixelDatas GetZoomedPicPixelDatas(PT_PixelDatas ptOriginPicPixelDatas, int iZoomedWidth, int iZoomedHeight)
 {
-    return (ptInputEvent1->x - ptInputEvent2->x) * (ptInputEvent1->x - ptInputEvent2->x) + \
-           (ptInputEvent1->y- ptInputEvent2->y) * (ptInputEvent1->y - ptInputEvent2->y);
+    float k;
+    int iXres, iYres, iBpp;
+
+    GetDispResolution(&iXres, &iYres, &iBpp);
+
+    if (g_tZoomedPicPixelDatas.aucPixelDatas)
+    {
+        free(g_tZoomedPicPixelDatas.aucPixelDatas);
+        g_tZoomedPicPixelDatas.aucPixelDatas = NULL;
+    }
+
+    k = (float)ptOriginPicPixelDatas->iHeight / ptOriginPicPixelDatas->iWidth;
+    g_tZoomedPicPixelDatas.iWidth  = iZoomedWidth;
+    g_tZoomedPicPixelDatas.iHeight = iZoomedWidth * k;
+    if (g_tZoomedPicPixelDatas.iHeight > iZoomedHeight)
+    {
+        g_tZoomedPicPixelDatas.iWidth  = iZoomedHeight / k;
+        g_tZoomedPicPixelDatas.iHeight = iZoomedHeight;
+    }
+    g_tZoomedPicPixelDatas.iBpp        = iBpp;
+    g_tZoomedPicPixelDatas.iLineBytes  = g_tZoomedPicPixelDatas.iWidth * g_tZoomedPicPixelDatas.iBpp / 8;
+    g_tZoomedPicPixelDatas.iTotalBytes = g_tZoomedPicPixelDatas.iLineBytes * g_tZoomedPicPixelDatas.iHeight;
+    g_tZoomedPicPixelDatas.aucPixelDatas = malloc(g_tZoomedPicPixelDatas.iTotalBytes);
+    if (g_tZoomedPicPixelDatas.aucPixelDatas == NULL)
+    {
+        return NULL;
+    }
+
+    PicZoom(ptOriginPicPixelDatas, &g_tZoomedPicPixelDatas);
+    return &g_tZoomedPicPixelDatas;
 }
 
 
+/**********************************************************************
+ * 函数名称： ShowPictureInManualPage
+ * 功能描述： 在"manual页面"中显示图片
+ * 输入参数： strFileName - 要显示的文件的名字(含绝对路径)
+ *            ptVideoMem  - 在这个VideoMem中显示
+ * 输出参数： 无
+ * 返 回 值： 0      - 成功
+ *            其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static int ShowPictureInManualPage(PT_VideoMem ptVideoMem, char *strFileName)
 {
-	int iXres, iYres, bpp;
-    int iPictureLayoutWidth;
-    int iPictureLayoutheight;
-    int TopLeftX, TopLeftY;
-	PT_PixelDatas ptZoomedPicPixelDatas;
     PT_PixelDatas ptOriginPicPixelDatas;
+    PT_PixelDatas ptZoomedPicPixelDatas;
+    int iPictureLayoutWidth;
+    int iPictureLayoutHeight;
+    int iTopLeftX, iTopLeftY;
+    int iXres, iYres, iBpp;
 
-	GetDispResolution(&iXres, &iYres, &bpp);
+    GetDispResolution(&iXres, &iYres, &iBpp);
 
-    /* 获得图片文件的数据 */
-    ptOriginPicPixelDatas =  GetOriginPictureFilePixelDatas(strFileName);
+    /* 获得图片文件的原始数据 */
+    ptOriginPicPixelDatas = GetOriginPictureFilePixelDatas(strFileName);
     if (!ptOriginPicPixelDatas)
     {
         return -1;
     }
-    
+
     /* 把图片按比例缩放到LCD屏幕上, 居中显示 */
-    iPictureLayoutWidth  = s_tManualPictureLayout.BotRightX - s_tManualPictureLayout.TopLeftX + 1;
-    iPictureLayoutheight = s_tManualPictureLayout.BotRightY - s_tManualPictureLayout.TopLeftY + 1;
-    ptZoomedPicPixelDatas = GetZoomedPicPixelDatas(&s_tOriginPicPixelDatas, iPictureLayoutWidth, iPictureLayoutheight);
+    iPictureLayoutWidth  = g_tManualPictureLayout.iBotRightX - g_tManualPictureLayout.iTopLeftX + 1;
+    iPictureLayoutHeight = g_tManualPictureLayout.iBotRightY - g_tManualPictureLayout.iTopLeftY + 1;
+
+    ptZoomedPicPixelDatas = GetZoomedPicPixelDatas(&g_tOriginPicPixelDatas, iPictureLayoutWidth, iPictureLayoutHeight);
     if (!ptZoomedPicPixelDatas)
     {
         return -1;
     }
-        
-    /* 算出居中显示时左上角坐标 */
-    TopLeftX = s_tManualPictureLayout.TopLeftX + (iPictureLayoutWidth - ptZoomedPicPixelDatas->width) / 2;
-    TopLeftY = s_tManualPictureLayout.TopLeftY + (iPictureLayoutheight - ptZoomedPicPixelDatas->height) / 2;
-    g_iXofZoomedPicShowInCenter = ptZoomedPicPixelDatas->width / 2;
-    g_iYofZoomedPicShowInCenter = ptZoomedPicPixelDatas->height / 2;
 
-    ClearVideoMemRegion(ptVideoMem, &s_tManualPictureLayout, COLOR_BACKGROUND);
-    PicMerge(TopLeftX, TopLeftY, ptZoomedPicPixelDatas, &ptVideoMem->tPixelDatas);
+    /* 算出居中显示时左上角坐标 */
+    iTopLeftX = g_tManualPictureLayout.iTopLeftX + (iPictureLayoutWidth - ptZoomedPicPixelDatas->iWidth) / 2;
+    iTopLeftY = g_tManualPictureLayout.iTopLeftY + (iPictureLayoutHeight - ptZoomedPicPixelDatas->iHeight) / 2;
+    g_iXofZoomedPicShowInCenter = ptZoomedPicPixelDatas->iWidth / 2;
+    g_iYofZoomedPicShowInCenter = ptZoomedPicPixelDatas->iHeight / 2;
+
+    ClearVideoMemRegion(ptVideoMem, &g_tManualPictureLayout, COLOR_BACKGROUND);
+    PicMerge(iTopLeftX, iTopLeftY, ptZoomedPicPixelDatas, &ptVideoMem->tPixelDatas);
 
     return 0;
 }
 
 
+/**********************************************************************
+ * 函数名称： ShowManualPage
+ * 功能描述： 显示"manual页面": 除了显示菜单图标外,还会显示图片
+ * 输入参数： ptPageLayout - 内含多个图标的文件名和显示区域
+ *            strFileName  - 要显示的图片
+ * 输出参数： 无
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static void ShowManualPage(PT_PageLayout ptPageLayout, char *strFileName)
 {
-	PT_VideoMem ptVideoMem;
-	int error;
-	int xres, yres, bpp;
+    PT_VideoMem ptVideoMem;
+    int iError;
 
+    PT_Layout atLayout = ptPageLayout->atLayout;
 
-	GetDispResolution(&xres, &yres, &bpp);
-	PT_Layout ptLayout = ptPageLayout->ptLayout;
-		
-	/* 1. 获得显存 */
-	ptVideoMem = GetVideoMem(ID("manual"), 1);
-	if (ptVideoMem == NULL)
-	{
-		DBG_PRINTF("can't get video mem for manual page!\n");
-		return;
-	}
+    /* 1. 获得显存 */
+    ptVideoMem = GetVideoMem(ID("manual"), 1);
+    if (ptVideoMem == NULL)
+    {
+        DBG_PRINTF("can't get video mem for manual page!\n");
+        return;
+    }
 
-	/* 2. 描画数据 */
+    /* 2. 描画数据 */
 
-	/* 如果还没有计算过各图标的坐标 */
-	if (ptLayout[0].TopLeftX == 0)
-	{
-		CalcManualPageMenusLayout(ptPageLayout);
+    /* 如果还没有计算过各图标的坐标 */
+    if (atLayout[0].iTopLeftX == 0)
+    {
+        CalcManualPageMenusLayout(ptPageLayout);
         CalcManualPagePictureLayout();
-	}
+    }
 
     /* 在videomem上生成图标 */
-    //显示功能键
-	error = GeneratePage(ptPageLayout, ptVideoMem);
-	
-	 /* 获得图片文件的数据 */
-    //显示图片
-    error = ShowPictureInManualPage(ptVideoMem, strFileName);
-    if (error)
+    iError = GeneratePage(ptPageLayout, ptVideoMem);
+
+    iError = ShowPictureInManualPage(ptVideoMem, strFileName);
+    if (iError)
     {
         PutVideoMem(ptVideoMem);
         return;
     }
-    
 
-	/* 3. 刷到设备上去 */
-	FlushVideoMemToDev(ptVideoMem);
+    /* 3. 刷到设备上去 */
+    FlushVideoMemToDev(ptVideoMem);
 
-	/* 4. 解放显存 */
-	PutVideoMem(ptVideoMem);
+    /* 4. 解放显存 */
+    PutVideoMem(ptVideoMem);
 }
 
+
+/**********************************************************************
+ * 函数名称： ManualPageGetInputEvent
+ * 功能描述： 为"manual页面"获得输入数据,判断输入事件位于哪一个图标上
+ * 输入参数： ptPageLayout - 内含多个图标的显示区域
+ * 输出参数： ptInputEvent - 内含得到的输入数据
+ * 返 回 值： -1     - 输入数据不位于任何一个图标之上
+ *            其他值 - 输入数据所落在的图标(PageLayout->atLayout数组的哪一项)
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static int ManualPageGetInputEvent(PT_PageLayout ptPageLayout, PT_InputEvent ptInputEvent)
 {
-	return GenericGetInputEvent(ptPageLayout, ptInputEvent);
+    return GenericGetInputEvent(ptPageLayout, ptInputEvent);
 }
 
 
+/**********************************************************************
+ * 函数名称： DistanceBetweenTwoPoint
+ * 功能描述： 计算两个触点的距离, 为简化计算, 返回距离的平方值
+ * 输入参数： ptInputEvent1 - 触点1
+              ptInputEvent1 - 触点2
+ * 输出参数： 无
+ * 返 回 值： 触点距离的平方值
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static int DistanceBetweenTwoPoint(PT_InputEvent ptInputEvent1, PT_InputEvent ptInputEvent2)
+{
+    return (ptInputEvent1->iX - ptInputEvent2->iX) * (ptInputEvent1->iX - ptInputEvent2->iX) + \
+           (ptInputEvent1->iY - ptInputEvent2->iY) * (ptInputEvent1->iY - ptInputEvent2->iY);
+}
+
+/**********************************************************************
+ * 函数名称： ShowZoomedPictureInLayout
+ * 功能描述： 在"manual页面"中显示经过缩放的图片
+ * 输入参数： ptZoomedPicPixelDatas - 内含已经缩放的图片的象素数据
+ *            ptVideoMem            - 在这个VideoMem中显示
+ * 输出参数： 无
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static void ShowZoomedPictureInLayout(PT_PixelDatas ptZoomedPicPixelDatas, PT_VideoMem ptVideoMem)
 {
     int iStartXofNewPic, iStartYofNewPic;
     int iStartXofOldPic, iStartYofOldPic;
-    int widthPictureInPlay, heightPictureInPlay;
+    int iWidthPictureInPlay, iHeightPictureInPlay;
     int iPictureLayoutWidth, iPictureLayoutHeight;
     int iDeltaX, iDeltaY;
 
-    iPictureLayoutWidth  = s_tManualPictureLayout.BotRightX - s_tManualPictureLayout.TopLeftX + 1;
-    iPictureLayoutHeight = s_tManualPictureLayout.BotRightY - s_tManualPictureLayout.TopLeftY + 1;
-    
+    iPictureLayoutWidth  = g_tManualPictureLayout.iBotRightX - g_tManualPictureLayout.iTopLeftX + 1;
+    iPictureLayoutHeight = g_tManualPictureLayout.iBotRightY - g_tManualPictureLayout.iTopLeftY + 1;
+
     /* 显示新数据 */
     iStartXofNewPic = g_iXofZoomedPicShowInCenter - iPictureLayoutWidth/2;
     if (iStartXofNewPic < 0)
     {
         iStartXofNewPic = 0;
     }
-    if (iStartXofNewPic > ptZoomedPicPixelDatas->width)
+    if (iStartXofNewPic > ptZoomedPicPixelDatas->iWidth)
     {
-        iStartXofNewPic = ptZoomedPicPixelDatas->width;
+        iStartXofNewPic = ptZoomedPicPixelDatas->iWidth;
     }
 
-    /* 
+    /*
      * g_iXofZoomedPicShowInCenter - iStartXofNewPic = PictureLayout中心点X坐标 - iStartXofOldPic
      */
     iDeltaX = g_iXofZoomedPicShowInCenter - iStartXofNewPic;
-    iStartXofOldPic = (s_tManualPictureLayout.TopLeftX + iPictureLayoutWidth / 2) - iDeltaX;
-    if (iStartXofOldPic < s_tManualPictureLayout.TopLeftX)
+    iStartXofOldPic = (g_tManualPictureLayout.iTopLeftX + iPictureLayoutWidth / 2) - iDeltaX;
+    if (iStartXofOldPic < g_tManualPictureLayout.iTopLeftX)
     {
-        iStartXofOldPic = s_tManualPictureLayout.TopLeftX;
+        iStartXofOldPic = g_tManualPictureLayout.iTopLeftX;
     }
-    if (iStartXofOldPic > s_tManualPictureLayout.BotRightX)
+    if (iStartXofOldPic > g_tManualPictureLayout.iBotRightX)
     {
-        iStartXofOldPic = s_tManualPictureLayout.BotRightX + 1;
+        iStartXofOldPic = g_tManualPictureLayout.iBotRightX + 1;
     }
-        
-    if ((ptZoomedPicPixelDatas->width - iStartXofNewPic) > (s_tManualPictureLayout.BotRightX - iStartXofOldPic + 1))
-        widthPictureInPlay = (s_tManualPictureLayout.BotRightX - iStartXofOldPic + 1);
+
+    if ((ptZoomedPicPixelDatas->iWidth - iStartXofNewPic) > (g_tManualPictureLayout.iBotRightX - iStartXofOldPic + 1))
+        iWidthPictureInPlay = (g_tManualPictureLayout.iBotRightX - iStartXofOldPic + 1);
     else
-        widthPictureInPlay = (ptZoomedPicPixelDatas->width - iStartXofNewPic);
-    
+        iWidthPictureInPlay = (ptZoomedPicPixelDatas->iWidth - iStartXofNewPic);
+
     iStartYofNewPic = g_iYofZoomedPicShowInCenter - iPictureLayoutHeight/2;
     if (iStartYofNewPic < 0)
     {
         iStartYofNewPic = 0;
     }
-    if (iStartYofNewPic > ptZoomedPicPixelDatas->height)
+    if (iStartYofNewPic > ptZoomedPicPixelDatas->iHeight)
     {
-        iStartYofNewPic = ptZoomedPicPixelDatas->height;
+        iStartYofNewPic = ptZoomedPicPixelDatas->iHeight;
     }
 
-    /* 
+    /*
      * g_iYofZoomedPicShowInCenter - iStartYofNewPic = PictureLayout中心点Y坐标 - iStartYofOldPic
      */
     iDeltaY = g_iYofZoomedPicShowInCenter - iStartYofNewPic;
-    iStartYofOldPic = (s_tManualPictureLayout.TopLeftY + iPictureLayoutHeight / 2) - iDeltaY;
+    iStartYofOldPic = (g_tManualPictureLayout.iTopLeftY + iPictureLayoutHeight / 2) - iDeltaY;
 
-    if (iStartYofOldPic < s_tManualPictureLayout.TopLeftY)
+    if (iStartYofOldPic < g_tManualPictureLayout.iTopLeftY)
     {
-        iStartYofOldPic = s_tManualPictureLayout.TopLeftY;
+        iStartYofOldPic = g_tManualPictureLayout.iTopLeftY;
     }
-    if (iStartYofOldPic > s_tManualPictureLayout.BotRightY)
+    if (iStartYofOldPic > g_tManualPictureLayout.iBotRightY)
     {
-        iStartYofOldPic = s_tManualPictureLayout.BotRightY + 1;
+        iStartYofOldPic = g_tManualPictureLayout.iBotRightY + 1;
     }
-    
-    if ((ptZoomedPicPixelDatas->height - iStartYofNewPic) > (s_tManualPictureLayout.BotRightY - iStartYofOldPic + 1))
+
+    if ((ptZoomedPicPixelDatas->iHeight - iStartYofNewPic) > (g_tManualPictureLayout.iBotRightY - iStartYofOldPic + 1))
     {
-        heightPictureInPlay = (s_tManualPictureLayout.BotRightY - iStartYofOldPic + 1);
+        iHeightPictureInPlay = (g_tManualPictureLayout.iBotRightY - iStartYofOldPic + 1);
     }
     else
     {
-        heightPictureInPlay = (ptZoomedPicPixelDatas->height - iStartYofNewPic);
+        iHeightPictureInPlay = (ptZoomedPicPixelDatas->iHeight - iStartYofNewPic);
     }
-        
-    ClearVideoMemRegion(ptVideoMem, &s_tManualPictureLayout, COLOR_BACKGROUND);
-    PicMergeRegion(iStartXofNewPic, iStartYofNewPic, iStartXofOldPic, iStartYofOldPic, widthPictureInPlay, heightPictureInPlay, ptZoomedPicPixelDatas, &ptVideoMem->tPixelDatas);
+
+    ClearVideoMemRegion(ptVideoMem, &g_tManualPictureLayout, COLOR_BACKGROUND);
+    PicMergeRegion(iStartXofNewPic, iStartYofNewPic, iStartXofOldPic, iStartYofOldPic, iWidthPictureInPlay, iHeightPictureInPlay, ptZoomedPicPixelDatas, &ptVideoMem->tPixelDatas);
 }
 
-/* manual页面的Run参数含义: 
- * 如果它的父页面是主页面   - 显示browse页面, 
- * 否则 - 显示图片
- */
-static int ManualPageRun(PT_PageParams ptParentPageParams)
+/**********************************************************************
+ * 函数名称： ManualPageRun
+ * 功能描述： "manual页面"的运行函数: 显示菜单图标,显示图片,根据用户操作作出反应(比如缩放/移动图片等)
+ * 输入参数： ptParentPageParams - 内含上一个页面(父页面)的参数
+ *                                 ptParentPageParams->iPageID等于ID("main")时,显示"浏览页面";否则显示图片
+ * 输出参数： 无
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static void ManualPageRun(PT_PageParams ptParentPageParams)
 {
-	T_InputEvent tInputEvent;
-	T_InputEvent tPreInputEvent;
-	int bPressed = 0;
-	int iIndexPressed = -1;
+    T_InputEvent tInputEvent;
+    T_InputEvent tPreInputEvent;
+    int bButtonPressed = 0;
+    int bPicSlipping = 0;
+    int iIndexPressed = -1;
     int iIndex;
     T_PageParams tPageParams;
     int iError;
@@ -448,234 +549,222 @@ static int ManualPageRun(PT_PageParams ptParentPageParams)
     int iDirContentsNumber;
     int iPicFileIndex;
     char *pcTmp;
-	int ZoomedWidth;
-	int ZoomedHeight;
-    PT_PixelDatas ptZoomedPicPixelDatas;
-	int widthPictureInPlay, heightPictureInPlay;
-	int iPictureLayoutWidth, iPictureLayoutHeight;
     PT_VideoMem ptDevVideoMem;
-	int iXres, iYres, bpp;
-	int bPicSlipping= 0;
+    int iZoomedWidth;
+    int iZoomedHeight;
+    PT_PixelDatas ptZoomedPicPixelDatas = &g_tZoomedPicPixelDatas;
 
-	GetDispResolution(&iXres, &iYres, &bpp);
+    (void)iError;
 
-	widthPictureInPlay = 0;
-	heightPictureInPlay = 0;
-	tPreInputEvent.x = 0;
-	tPreInputEvent.y = 0;
-	ptZoomedPicPixelDatas = &s_tZoomedPicPixelDatas;
+    /* 这两句只是避免编译警告 */
+    tPreInputEvent.iX = 0;
+    tPreInputEvent.iY = 0;
 
     tPageParams.iPageID = ID("manual");
-    
-    if (ptParentPageParams->iPageID == ID("main"))//会出现这种情况吗？？
+
+    ptDevVideoMem = GetDevVideoMem();
+    strcpy(strFullPathName, ptParentPageParams->strCurPictureFile);
+
+    /* 显示菜单和图片文件 */
+    ShowManualPage(&g_tManualPageMenuIconsLayout, strFullPathName);
+
+    /* 取出目录名 */
+    strcpy(strDirName, ptParentPageParams->strCurPictureFile);
+    pcTmp = strrchr(strDirName, '/');
+    *pcTmp = '\0';
+
+    /* 取出文件名 */
+    strcpy(strFileName, pcTmp+1);
+
+    /* 获得当前目录下所有目录和文件的名字 */
+    iError = GetDirContents(strDirName, &aptDirContents, &iDirContentsNumber);
+
+    /* 确定当前显示的是哪一个文件 */
+    for (iPicFileIndex = 0; iPicFileIndex < iDirContentsNumber; iPicFileIndex++)
     {
-        /* 如果它的父页面是主页面 - 显示browse页面*/
-        Page("browse")->Run(ptParentPageParams);
-    }
-    else
-    {
-        ptDevVideoMem = GetDevVideoMem();
-        strcpy(strFullPathName, ptParentPageParams->strCurPictureFile);
-      
-
-		/* 显示菜单和图片文件 */
-		ShowManualPage(&s_tManualPageMenuIconsLayout, strFullPathName);
-
-	   iPictureLayoutWidth	= s_tManualPictureLayout.BotRightX - s_tManualPictureLayout.TopLeftX + 1;
-	   iPictureLayoutHeight = s_tManualPictureLayout.BotRightY - s_tManualPictureLayout.TopLeftY + 1;
-
-        /* 取出目录名 */
-        strcpy(strDirName, ptParentPageParams->strCurPictureFile);
-        //找到最后一个/，即当前图片的目录
-        pcTmp = strrchr(strDirName, '/');
-        *pcTmp = '\0';
-
-        /* 取出文件名 */
-        strcpy(strFileName, pcTmp+1);
-
-        /* 获得当前目录下所有目录和文件的名字 */
-        iError = GetDirContents(strDirName, &aptDirContents, &iDirContentsNumber);
-
-        /* 确定当前显示的是哪一个文件 */
-        // 主要确定点击显示的图片在目录中的序号
-        for (iPicFileIndex = 0; iPicFileIndex < iDirContentsNumber; iPicFileIndex++)
+        if (0 == strcmp(strFileName, aptDirContents[iPicFileIndex]->strName))
         {
-            if (0 == strcmp(strFileName, aptDirContents[iPicFileIndex]->strName))
-            {
-                break;
-            }
+            break;
         }
+    }
 
-        while (1)
+    while (1)
+    {
+        /* 先确定是否触摸了菜单图标 */
+        iIndex = ManualPageGetInputEvent(&g_tManualPageMenuIconsLayout, &tInputEvent);
+
+        /* 如果是松开 */
+        if (tInputEvent.iPressure == 0)
         {
-            /* 先确定是否触摸了菜单图标 */
-            iIndex = ManualPageGetInputEvent(&s_tManualPageMenuIconsLayout, &tInputEvent);
-            if (tInputEvent.pressure == 0)
-            {
-                /* 如果是松开 */
-                if (bPressed)
-                {
-                	bPicSlipping = 0;
-                    /* 曾经有按钮被按下 */
-                    ReleaseButton(&s_atManualMenuIconsLayout[iIndexPressed]);
-                    bPressed = 0;
+            bPicSlipping = 0;
 
-                    if (iIndexPressed == iIndex) /* 按下和松开都是同一个按钮 */
+            if (bButtonPressed)
+            {
+                /* 曾经有按钮被按下 */
+                ReleaseButton(&g_atManualMenuIconsLayout[iIndexPressed]);
+                bButtonPressed = 0;
+
+                if (iIndexPressed == iIndex) /* 按下和松开都是同一个按钮 */
+                {
+                    switch (iIndexPressed)
                     {
-                        switch (iIndexPressed)
+                        case 0: /* 返回按钮 */
                         {
-                            case 0: /* 返回按钮 */
-                            {
-                                return 0;
-                                break;
-                            }
-                           case 1: /* 缩小按钮 */
-                           {
-								/* 获得缩小后的数据 */
-								ZoomedWidth  = (float)s_tZoomedPicPixelDatas.width * ZOOM_RATIO;
-								ZoomedHeight = (float)s_tZoomedPicPixelDatas.height * ZOOM_RATIO;
-								ptZoomedPicPixelDatas = GetZoomedPicPixelDatas(&s_tOriginPicPixelDatas, ZoomedWidth, ZoomedHeight);
-
-								/* 重新计算中心点 */
-								g_iXofZoomedPicShowInCenter = (float)g_iXofZoomedPicShowInCenter * ZOOM_RATIO;
-								g_iYofZoomedPicShowInCenter = (float)g_iYofZoomedPicShowInCenter * ZOOM_RATIO;
-
-								/* 显示新数据 */
-							   ShowZoomedPictureInLayout(ptZoomedPicPixelDatas, ptDevVideoMem);
-								break;
-							}
-							case 2: /* 放大按钮 */
-							{
-								/* 获得放大后的数据 */
-								ZoomedWidth  = (float)s_tZoomedPicPixelDatas.width / ZOOM_RATIO;
-								ZoomedHeight = (float)s_tZoomedPicPixelDatas.height / ZOOM_RATIO;
-								ptZoomedPicPixelDatas = GetZoomedPicPixelDatas(&s_tOriginPicPixelDatas, ZoomedWidth, ZoomedHeight);
-								
-								/* 重新计算中心点 */
-								g_iXofZoomedPicShowInCenter = (float)g_iXofZoomedPicShowInCenter / ZOOM_RATIO;
-								g_iYofZoomedPicShowInCenter = (float)g_iYofZoomedPicShowInCenter / ZOOM_RATIO;
-
-								 /* 显示新数据 */
-                                ShowZoomedPictureInLayout(ptZoomedPicPixelDatas, ptDevVideoMem);
-								break;
-                            }
-                            case 3: /* "上一张"按钮 */
-                            {
-                                while (iPicFileIndex > 0)
-                                {
-                                    iPicFileIndex--;
-                                    snprintf(strFullPathName, 256, "%s/%s", strDirName, aptDirContents[iPicFileIndex]->strName);
-                                    strFullPathName[255] = '\0';
-                                    
-                                    if (isPictureFileSupported(strFullPathName))
-                                    {
-                                        ShowPictureInManualPage(ptDevVideoMem, strFullPathName);
-                                        break;
-                                    }
-                                }
-                                
-                                break;
-                            }
-                            case 4: /* "下一张"按钮 */
-                            {
-                                while (iPicFileIndex < iDirContentsNumber - 1)
-                                {
-                                    iPicFileIndex++;
-                                    snprintf(strFullPathName, 256, "%s/%s", strDirName, aptDirContents[iPicFileIndex]->strName);
-                                    strFullPathName[255] = '\0';
-
-                                    if (isPictureFileSupported(strFullPathName))
-                                    {
-                                        ShowPictureInManualPage(ptDevVideoMem, strFullPathName);
-                                        break;
-                                    }
-                                }
-                                break;
-                            }
-                            case 5: /* "连播"按钮 */
-                            {
-                                /* Manual页面的触发有两个方法: 在主页面按"浏览模式"进入"浏览页面"->"选中某个文件" 2.在"连播页面"里点击正在显示的图片
-                                 * 如果是后者, 直接return就可以了:因为return后是返回到"连播页面"的, 它会继续"连播"
-                                 */
-                                DBG_PRINTF("%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-                                if (ptParentPageParams->iPageID == ID("browse"))  /* 触发自"浏览页面" */
-                                {
-                                    DBG_PRINTF("%s %s %d\n", __FILE__, __FUNCTION__, __LINE__);
-                                    strcpy(tPageParams.strCurPictureFile, strFullPathName);
-                                    Page("auto")->Run(&tPageParams);  /* auto页面返回前,会把它正在显示的文件存在tPageParams.strCurPictureFile */
-                                    ShowManualPage(&s_tManualPageMenuIconsLayout, tPageParams.strCurPictureFile);
-                                }
-                                else /* 当前manual页面的父页面是auto页面, 直接返回即可 */
-                                {
-                                  
-                                    return 0;
-                                }
-                                break;
-                            }
-                            default:
-                            {
-                                break;
-                            }
+                            return;
+                            break;
                         }
-                    }
-                    
-                    iIndexPressed = -1;
-                }
-            }
-            else
-            {
-                /* 按下状态 */
-                if (iIndex != -1)
-                {
-                    if (!bPressed)
-                    {
-                        /* 未曾按下按钮 */
-                        bPressed = 1;
-                        iIndexPressed = iIndex;
-                        PressButton(&s_atManualMenuIconsLayout[iIndexPressed]);
-                    }
-                }
-				else  /* 点击的是图片显示区域, 滑动图片 */
-				{
-					/* 如果没有按钮被按下 */
-					if (!bPressed && !bPicSlipping)
-					{
-						bPicSlipping = 1;
-                        tPreInputEvent = tInputEvent;
-					}
+                        case 1: /* 缩小按钮 */
+                        {
+                            /* 获得缩小后的数据 */
+                            iZoomedWidth  = (float)g_tZoomedPicPixelDatas.iWidth * ZOOM_RATIO;
+                            iZoomedHeight = (float)g_tZoomedPicPixelDatas.iHeight * ZOOM_RATIO;
+                            ptZoomedPicPixelDatas = GetZoomedPicPixelDatas(&g_tOriginPicPixelDatas, iZoomedWidth, iZoomedHeight);
 
-					if (bPicSlipping)
-					{
-                        /* 如果触点滑动距离大于规定值, 则挪动图片 */
-                        if (DistanceBetweenTwoPoint(&tInputEvent, &tPreInputEvent) > SLIP_MIN_DISTANCE)
-                        {                            
                             /* 重新计算中心点 */
-                            g_iXofZoomedPicShowInCenter -= (tInputEvent.x - tPreInputEvent.x);
-                            g_iYofZoomedPicShowInCenter -= (tInputEvent.y - tPreInputEvent.y);
-                            
+                            g_iXofZoomedPicShowInCenter = (float)g_iXofZoomedPicShowInCenter * ZOOM_RATIO;
+                            g_iYofZoomedPicShowInCenter = (float)g_iYofZoomedPicShowInCenter * ZOOM_RATIO;
+
                             /* 显示新数据 */
                             ShowZoomedPictureInLayout(ptZoomedPicPixelDatas, ptDevVideoMem);
-                            
-                            /* 记录滑动点 */
-                            tPreInputEvent = tInputEvent;                            
-                        }
-					}
-				}
-            }       
 
-            
+                            break;
+                        }
+                        case 2: /* 放大按钮 */
+                        {
+                            /* 获得放大后的数据 */
+                            iZoomedWidth  = (float)g_tZoomedPicPixelDatas.iWidth / ZOOM_RATIO;
+                            iZoomedHeight = (float)g_tZoomedPicPixelDatas.iHeight / ZOOM_RATIO;
+                            ptZoomedPicPixelDatas = GetZoomedPicPixelDatas(&g_tOriginPicPixelDatas, iZoomedWidth, iZoomedHeight);
+
+                            /* 重新计算中心点 */
+                            g_iXofZoomedPicShowInCenter = (float)g_iXofZoomedPicShowInCenter / ZOOM_RATIO;
+                            g_iYofZoomedPicShowInCenter = (float)g_iYofZoomedPicShowInCenter / ZOOM_RATIO;
+
+                            /* 显示新数据 */
+                            ShowZoomedPictureInLayout(ptZoomedPicPixelDatas, ptDevVideoMem);
+
+                            break;
+                        }
+                        case 3: /* "上一张"按钮 */
+                        {
+                            while (iPicFileIndex > 0)
+                            {
+                                iPicFileIndex--;
+                                snprintf(strFullPathName, 256, "%s/%s", strDirName, aptDirContents[iPicFileIndex]->strName);
+                                strFullPathName[255] = '\0';
+
+                                if (isPictureFileSupported(strFullPathName))
+                                {
+                                    ShowPictureInManualPage(ptDevVideoMem, strFullPathName);
+                                    break;
+                                }
+                            }
+
+                            break;
+                        }
+                        case 4: /* "下一张"按钮 */
+                        {
+                            while (iPicFileIndex < iDirContentsNumber - 1)
+                            {
+                                iPicFileIndex++;
+                                snprintf(strFullPathName, 256, "%s/%s", strDirName, aptDirContents[iPicFileIndex]->strName);
+                                strFullPathName[255] = '\0';
+
+                                if (isPictureFileSupported(strFullPathName))
+                                {
+                                    ShowPictureInManualPage(ptDevVideoMem, strFullPathName);
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                        case 5: /* "连播"按钮 */
+                        {
+                            /* Manual页面的触发有两个方法: 在主页面按"浏览模式"进入"浏览页面"->"选中某个文件", 在"连播页面"里点击正在显示的图片
+                             * 如果是后者, 直接return就可以了:因为return后是返回到"连播页面"的, 它会继续"连播"
+                             */
+                            if (ptParentPageParams->iPageID == ID("browse"))  /* 触发自"浏览页面" */
+                            {
+                                strcpy(tPageParams.strCurPictureFile, strFullPathName);
+                                Page("auto")->Run(&tPageParams);
+                                ShowManualPage(&g_tManualPageMenuIconsLayout, tPageParams.strCurPictureFile);
+                            }
+                            else /* 当前manual页面的父页面是auto页面, 直接返回即可 */
+                            {
+                                return;
+                            }
+                            break;
+                        }
+                        default:
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                iIndexPressed = -1;
+            }
+        }
+        else /* 按下状态 */
+        {
+            /* 点击的是菜单按钮 */
+            if (iIndex != -1)
+            {
+                if (!bButtonPressed)
+                {
+                    /* 未曾按下按钮 */
+                    bButtonPressed = 1;
+                    iIndexPressed = iIndex;
+                    PressButton(&g_atManualMenuIconsLayout[iIndexPressed]);
+                }
+            }
+            else  /* 点击的是图片显示区域, 滑动图片 */
+            {
+                /* 如果没有按钮被按下 */
+                if (!bButtonPressed && !bPicSlipping)
+                {
+                    bPicSlipping = 1;
+                    tPreInputEvent = tInputEvent;
+                }
+
+                if (bPicSlipping)
+                {
+                    /* 如果触点滑动距离大于规定值, 则挪动图片 */
+                    if (DistanceBetweenTwoPoint(&tInputEvent, &tPreInputEvent) > SLIP_MIN_DISTANCE)
+                    {
+                        /* 重新计算中心点 */
+                        g_iXofZoomedPicShowInCenter -= (tInputEvent.iX - tPreInputEvent.iX);
+                        g_iYofZoomedPicShowInCenter -= (tInputEvent.iY - tPreInputEvent.iY);
+
+                        /* 显示新数据 */
+                        ShowZoomedPictureInLayout(ptZoomedPicPixelDatas, ptDevVideoMem);
+
+                        /* 记录滑动点 */
+                        tPreInputEvent = tInputEvent;
+                    }
+                }
+            }
         }
     }
-	return 0;
 }
 
-static T_PageAction s_tManualPageAction = {
-	.name          = "manual",
-	.Run           = ManualPageRun,
+static T_PageAction g_tManualPageAction = {
+    .name          = "manual",
+    .Run           = ManualPageRun,
 };
 
+
+/**********************************************************************
+ * 函数名称： ManualPageInit
+ * 功能描述： 注册"manual页面"
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 int ManualPageInit(void)
 {
-	return RegisterPageAction(&s_tManualPageAction);
+    return RegisterPageAction(&g_tManualPageAction);
 }
-

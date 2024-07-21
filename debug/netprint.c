@@ -1,255 +1,348 @@
-
-#include <stdio.h>
-#include <stdarg.h>
-#include <sys/types.h>
+#include <include/config.h>
+#include <include/debug_manager.h>
+#include <sys/types.h>          /* See NOTES */
 #include <sys/socket.h>
 #include <string.h>
-#include <errno.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <signal.h>
-#include <pthread.h>
 #include <stdlib.h>
+#include <pthread.h>
 
-#include "include/config.h"
-#include "include/debug_manager.h"
+#define SERVER_PORT 5678
+#define PRINT_BUF_SIZE   (16*1024)
 
+static int g_iSocketServer;
+static struct sockaddr_in g_tSocketServerAddr;
+static struct sockaddr_in g_tSocketClientAddr;
+static int g_iHaveConnected = 0;
+static char *g_pcNetPrintBuf;
+static int g_iReadPos  = 0;
+static int g_iWritePos = 0;
 
-#define SERVER_PORT 	 	5678
-#define PRINT_BUF_SIZE 		(16 * 1024)
+static pthread_t g_tSendTreadID;
+static pthread_t g_tRecvTreadID;
 
-static int s_SocketServer;		//服务器端套接字
+static pthread_mutex_t g_tNetDbgSendMutex  = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t  g_tNetDbgSendConVar = PTHREAD_COND_INITIALIZER;
 
-static int s_isHaveConect = 0;	//服务器端与客户端连接标志，0-未连接，1-连接
-static struct sockaddr_in s_tSocketServerAddr;	//服务器端
-static struct sockaddr_in s_tSocketClientAddr;	//客户端
+/* 要通过网络打印的信息存在环型缓冲区里,
+ * 当有客户端连接上本程序时, 发送线程才从环型缓冲区中取出数据发送出去
+ */
 
-static char *s_pNetPrintBuf;	//网络打印缓冲区
-static int s_WritePos = 0;		//环形缓冲区写位置
-static int s_ReadPos  = 0;		//环形缓冲区读位置
-
-static pthread_t s_tSendThreadId;		//发送线程ID
-static pthread_t s_tRecvThreadId;		//接收线程ID
-static pthread_cond_t s_tDebugSendCondvar   = PTHREAD_COND_INITIALIZER;		//发送线程条件变量
-static pthread_mutex_t s_tNetDebugSendMutex = PTHREAD_MUTEX_INITIALIZER;	//发送线程互斥量
-
-/* 判断缓冲区是否满， 满 - 1 */
+/**********************************************************************
+ * 函数名称： isFull
+ * 功能描述： 判断环型缓冲区是否满
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 0 - 未满, 1 - 满
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static int isFull(void)
 {
-	return (((s_WritePos + 1) % PRINT_BUF_SIZE) == s_ReadPos);
+    return (((g_iWritePos + 1) % PRINT_BUF_SIZE) == g_iReadPos);
 }
 
-/* 判断缓冲区是否空， 空 - 1 */
+/**********************************************************************
+ * 函数名称： isEmpty
+ * 功能描述： 判断环型缓冲区是否空
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 0 - 里面有数据, 1 - 无数据
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static int isEmpty(void)
 {
-	return (s_WritePos == s_ReadPos);
+    return (g_iWritePos == g_iReadPos);
 }
 
-/* 把数据写入环形缓冲区 */
-static int PutData(char val)
+
+/**********************************************************************
+ * 函数名称： PutData
+ * 功能描述： 往环型缓冲区中放入数据
+ * 输入参数： cVal - 数据
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败(缓冲区满)
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static int PutData(char cVal)
 {
-	if (isFull())
-		return -1;
-	else {
-		s_pNetPrintBuf[s_WritePos] = val;		//写入数据
-		s_WritePos = (s_WritePos + 1) % PRINT_BUF_SIZE;	//移动写位置
-		return 0;
-	}
+    if (isFull())
+        return -1;
+    else
+    {
+        g_pcNetPrintBuf[g_iWritePos] = cVal;
+        g_iWritePos = (g_iWritePos + 1) % PRINT_BUF_SIZE;
+        return 0;
+    }
 }
 
-/* 从环形缓冲区中读出数据 */
-static int GetData(char *val)
+/**********************************************************************
+ * 函数名称： GetData
+ * 功能描述： 从环型缓冲区中获得数据
+ * 输入参数： 无
+ * 输出参数： pcVal - 用来存放所获得的数据
+ * 返 回 值： 0 - 成功, 其他值 - 失败(无数据)
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static int GetData(char *pcVal)
 {
-	if (isEmpty())
-		return -1;
-	else {
-		*val = s_pNetPrintBuf[s_ReadPos];		//读出数据
-		s_ReadPos = (s_ReadPos + 1) % PRINT_BUF_SIZE;	//移动读位置
-		return 0;
-	}		
+    if (isEmpty())
+        return -1;
+    else
+    {
+        *pcVal = g_pcNetPrintBuf[g_iReadPos];
+        g_iReadPos = (g_iReadPos + 1) % PRINT_BUF_SIZE;
+        return 0;
+    }
 }
 
-/* 发送线程函数 */
-static void *NetDebugSendThreadFunction(void *pvoid)
+
+/**********************************************************************
+ * 函数名称： NetDbgSendTreadFunction
+ * 功能描述： "网络输出调试通道"的发送线程函数
+ *            此线程平时休眠, 有数据要发送时被唤醒, 然后通过网络把数据发送出去
+ * 输入参数： pVoid - 未用
+ * 输出参数： 无
+ * 返 回 值： NULL - 线程退出
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static void *NetDbgSendTreadFunction(void *pVoid)
 {
-	int i;
-	int addrlen;
-	int sendlen;
-	char val;
-	char sendbuf[512];
-	
-	addrlen = sizeof(struct sockaddr);
-	
-	while (1) {
-		/* 休眠 */
-		/* 进入临界资源前，获得互斥量 */
-		pthread_mutex_lock(&s_tNetDebugSendMutex);	
+    char strTmpBuf[512];
+    char cVal;
+    int i;
+    int iAddrLen;
+    int iSendLen;
 
-		/* pthread_cond_wait会先解除之前的pthread_mutex_lock锁定的s_tNetDebugRecvMutex，
-	     * 然后阻塞在等待队列里休眠，直到再次被唤醒
-	     * （大多数情况下是等待的条件成立而被唤醒，唤醒后，该进程会先锁定pthread_mutex_lock(&s_tNetDebugRecvMutex)
-	     */
-		pthread_cond_wait(&s_tDebugSendCondvar, &s_tNetDebugSendMutex);
+    while (1)
+    {
+        /* 平时休眠, 其他线程调用DBG_PRINTF函数时, 将会调用到g_tNetDbgOpr.DebugPrint, 它会唤醒本线程 */
+        pthread_mutex_lock(&g_tNetDbgSendMutex);
+        pthread_cond_wait(&g_tNetDbgSendConVar, &g_tNetDbgSendMutex);
+        pthread_mutex_unlock(&g_tNetDbgSendMutex);
 
-		/* 释放互斥量 */
-		pthread_mutex_unlock(&s_tNetDebugSendMutex);
+        while (g_iHaveConnected && !isEmpty())
+        {
+            i = 0;
 
-		/* 被唤醒之后，把环形缓冲区的数据取出来，用sendto()进行网络打印信息给客户端 */
-		while ((s_isHaveConect == 1) && (!isEmpty())) {
-			i = 0;
-			
-			/* 从环形缓冲区中取数据 */
-			while((i < 512) && (GetData(&val) == 0)) {
-				sendbuf[i] = val;
-				i++;
-			}
+            /* 把环形缓冲区的数据取出来, 最多取512字节 */
+            while ((i < 512) && (0 == GetData(&cVal)))
+            {
+                strTmpBuf[i] = cVal;
+                i++;
+            }
 
-			/* 发送数据 */
-			sendlen = sendto(s_SocketServer, sendbuf, i, 0, 
-								(const struct sockaddr *)&s_tSocketClientAddr, addrlen);
-		}
-	}
+            /* 执行到这里, 表示被唤醒 */
+            /* 用sendto函数发送打印信息给客户端 */
+            iAddrLen = sizeof(struct sockaddr);
+            iSendLen = sendto(g_iSocketServer, strTmpBuf, i, 0,
+                                  (const struct sockaddr *)&g_tSocketClientAddr, iAddrLen);
+            (void)iSendLen;
 
-	return NULL;
+        }
+
+    }
+    return NULL;
 }
 
-/* 接收线程函数 */
-static void *NetDebugRecvThreadFunction(void *pvoid)
+/**********************************************************************
+ * 函数名称： NetDbgRecvTreadFunction
+ * 功能描述： "网络输出调试通道"的接收线程函数
+ *            接收客户端发来的数据,用于设置"调试信息发给哪个客户端"/打印级别/开或关某个调试通道
+ * 输入参数： pVoid - 未用
+ * 输出参数： 无
+ * 返 回 值： NULL - 线程退出
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static void *NetDbgRecvTreadFunction(void *pVoid)
 {
-	int addrlen;
-	int recvlen;
-	char recvbuf[1000];
-	struct sockaddr_in SocketClientAddr;
+    socklen_t iAddrLen;
+    int iRecvLen;
+    char ucRecvBuf[1000];
+    struct sockaddr_in tSocketClientAddr;
 
-	memset(recvbuf, 0, 1000);
-	addrlen = sizeof(struct sockaddr);
-	while (1) {
-		recvlen = recvfrom(s_SocketServer, recvbuf, 999, 0, 
-							(struct sockaddr *)&SocketClientAddr, (socklen_t *)&addrlen);
-		//udp在接收数据的时候会获得发送方和接收方的地址 SocketClientAddr 客户端地址   addrlen：客户端地址长度
+    while (1)
+    {
+        /* 读取客户端发来的数据 */
+        iAddrLen = sizeof(struct sockaddr);
+        DBG_PRINTF("in NetDbgRecvTreadFunction\n");
+        iRecvLen = recvfrom(g_iSocketServer, ucRecvBuf, 999, 0, (struct sockaddr *)&tSocketClientAddr, &iAddrLen);
 
-		/* 处理数据 */  //可以重新设置客户端地址和调试等级
-		if (addrlen > 0) {
-			DBG_PRINTF("netprint.c get msg: %s\n", recvbuf);
-			if (strcmp(recvbuf, "setclient") == 0)
-			{
-				/* 设置客户端 */
-				s_tSocketClientAddr = SocketClientAddr;
-				s_isHaveConect = 1;
-			} else if (strncmp(recvbuf, "dbglevel=", 9) == 0)
-				SetDebugLevel(recvbuf);		//设置打印级别
-			else
-				SetDebugChanel(recvbuf);	//设置打印通道
-		}
-	}
+        if (iRecvLen > 0)
+        {
+            ucRecvBuf[iRecvLen] = '\0';
+            DBG_PRINTF("netprint.c get msg: %s\n", ucRecvBuf);
 
-	return NULL;
+            /* 解析数据:
+             * setclient            : 设置接收打印信息的客户端
+             * dbglevel=0,1,2...    : 修改打印级别
+             * stdout=0             : 关闭stdout打印
+             * stdout=1             : 打开stdout打印
+             * netprint=0           : 关闭netprint打印
+             * netprint=1           : 打开netprint打印
+             */
+            if (strcmp(ucRecvBuf, "setclient")  == 0)
+            {
+                /* 发送来"setclient"的进程用于接收调试信息 */
+                g_tSocketClientAddr = tSocketClientAddr;
+                g_iHaveConnected = 1;
+            }
+            else if (strncmp(ucRecvBuf, "dbglevel=", 9) == 0)
+            {
+                /* 设置打印级别 */
+                SetDbgLevel(ucRecvBuf);
+            }
+            else
+            {
+                /* 开/关打印通道 */
+                SetDbgChanel(ucRecvBuf);
+            }
+        }
+
+    }
+    return NULL;
 }
 
-/* socket初始化 */
-static int NetPrintDebugInit(void)
+/**********************************************************************
+ * 函数名称： NetDbgInit
+ * 功能描述： "网络输出调试通道"的初始化函数
+ *            1. 设置端口信息
+ *            2. 创建2个子线程, 一个用来接收控制命令, 比如打开/关闭某个打印通道, 设置打印级别
+ *               (本程序有两个打印通道: 标准输出,网络打印)
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static int NetDbgInit(void)
 {
-	int ret;
-	int error;
+    /* socket初始化 */
+    int iRet;
 
-	printf("NetPrintDebugInit start\n");
-	
-	/* 分配一个套接口的描述字及其所用的资源
- 	 * AF_INET：针对Internet的,因而可以允许在远程主机之间通信
- 	 * SOCK_DGRAM：使用UDP协议,这样会提供定长的,不可靠,无连接的通信
-	 */
-	s_SocketServer = socket(AF_INET, SOCK_DGRAM, 0);
-	if (-1 == s_SocketServer)
-	{
-		printf("Socket error!\n");
-		return -1;
-	}
+    g_iSocketServer = socket(AF_INET, SOCK_DGRAM, 0);
+    if (-1 == g_iSocketServer)
+    {
+        printf("socket error!\n");
+        return -1;
+    }
 
-	s_tSocketServerAddr.sin_family	      = AF_INET;
-	s_tSocketServerAddr.sin_port		  = htons(SERVER_PORT);  /* host to net, short */
-	s_tSocketServerAddr.sin_addr.s_addr = INADDR_ANY;
-	memset(s_tSocketServerAddr.sin_zero, 0, 8);
+    g_tSocketServerAddr.sin_family      = AF_INET;
+    g_tSocketServerAddr.sin_port        = htons(SERVER_PORT);  /* host to net, short */
+    g_tSocketServerAddr.sin_addr.s_addr = INADDR_ANY;
+    memset(g_tSocketServerAddr.sin_zero, 0, 8);
 
-	/* 与socket返回的文件描述符捆绑在一起 */
-	ret = bind(s_SocketServer, (const struct sockaddr *)&s_tSocketServerAddr, sizeof(struct sockaddr));
-	if (ret == -1) {
-		printf("Bind error:%s\n",strerror(errno));
-		return -1;
-	}
+    iRet = bind(g_iSocketServer, (const struct sockaddr *)&g_tSocketServerAddr, sizeof(struct sockaddr));
+    if (-1 == iRet)
+    {
+        printf("bind error!\n");
+        return -1;
+    }
 
-	/* 分配缓冲区 */
-	s_pNetPrintBuf = malloc(PRINT_BUF_SIZE);
-	if (s_pNetPrintBuf == NULL) {
-		close(s_SocketServer);
-		printf("s_pNetPrintBuf malloc error!\n");
-		return -1;
-	}
+    g_pcNetPrintBuf = malloc(PRINT_BUF_SIZE);
+    if (NULL == g_pcNetPrintBuf)
+    {
+        close(g_iSocketServer);
+        return -1;
+    }
 
-	/* 创建netprint发送线程：用来发送打印信息给客户端 */
-	error = pthread_create(&s_tSendThreadId, NULL, NetDebugSendThreadFunction, NULL);
-	if (error != 0) {
-		printf("send pthread_creat error ,error code : %d\n", error);
-		return error;
-	}
-	
-	/* 创建netprint接收线程：用来接收控制信息，如修改打印级别、修改打印通道 */
-	error = pthread_create(&s_tRecvThreadId, NULL, NetDebugRecvThreadFunction, NULL);
-	if (error != 0) {
-		printf("recv pthread_creat error ,error code : %d\n", error);
-		return error;
-	}
 
-	printf("NetPrintDebugInit end\n");
-	return 0;
+    /* 创建netprint发送线程: 它用来发送打印信息给客户端 */
+    pthread_create(&g_tSendTreadID, NULL, NetDbgSendTreadFunction, NULL);
+
+    /* 创建netprint接收线否: 用来接收控制信息,比如修改打印级别,打开/关闭打印 */
+    pthread_create(&g_tRecvTreadID, NULL, NetDbgRecvTreadFunction, NULL);
+
+    return 0;
 }
 
-/* 关闭socket */
-static int NetPrinDebugtExit(void)
+/**********************************************************************
+ * 函数名称： NetDbgExit
+ * 功能描述： "网络输出调试通道"的退出函数
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static int NetDbgExit(void)
 {
-	close(s_SocketServer);
-	free(s_pNetPrintBuf);
-	
-	return 0;
+    /* 关闭socket,... */
+    close(g_iSocketServer);
+    free(g_pcNetPrintBuf);
+    return 0;
 }
 
-/* 网络打印服务器端 */
-static int NetPrintDebugPrint(char *strdata)
+/**********************************************************************
+ * 函数名称： StdoutDebugPrint
+ * 功能描述： "网络输出调试通道"的输出函数, 它只是把要输出的信息存入缓冲区,
+ *            然后唤醒输出线程
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 输出信息的长度
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static int NetDbgPrint(char *strData)
 {
-	
-	int i;
+    /* 把数据放入环形缓冲区 */
+    int i;
 
-	/* 把数据放入到环形缓冲区 */
-	for (i = 0; i < strlen(strdata); i++) {
-		if (PutData(strdata[i]) != 0)
-			break;
-	}
+    for (i = 0; i < strlen(strData); i++)
+    {
+        if (0 != PutData(strData[i]))
+            break;
+    }
 
-	/* 进入临界资源前，获得互斥量 */
-	pthread_mutex_lock(&s_tNetDebugSendMutex);	
+    /* 如果已经有客户端连接了, 就把数据通过网络发送给客户端 */
+    /* 唤醒netprint的发送线程 */
+    pthread_mutex_lock(&g_tNetDbgSendMutex);
+    pthread_cond_signal(&g_tNetDbgSendConVar);
+    pthread_mutex_unlock(&g_tNetDbgSendMutex);
 
-	/* 客户端连接后，数据通过网络发送给客户端，采用线程的方式 */
-	/* 唤醒netprint的发送线程 */
-	pthread_cond_signal(&s_tDebugSendCondvar);
+    return i;
 
-	/* 释放互斥量 */
-	pthread_mutex_unlock(&s_tNetDebugSendMutex);
-	
-	return i;
 }
 
-static T_DebugOpr s_tNetPrintDebugOpr = {
-	.name        = "netprint",
-    .isUsed      = 0,
-	.DebugInit   = NetPrintDebugInit,
-	.DebugExit   = NetPrinDebugtExit,
-	.DebugPrint  = NetPrintDebugPrint,
+
+static T_DebugOpr g_tNetDbgOpr = {
+    .name       = "netprint",
+    .isCanUse   = 1,
+    .DebugInit  = NetDbgInit,
+    .DebugExit  = NetDbgExit,
+    .DebugPrint = NetDbgPrint,
 };
 
+/**********************************************************************
+ * 函数名称： StdoutInit
+ * 功能描述： 注册"网络输出调试通道", 把g_tNetDbgOpr结构体放入链表中
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 int NetPrintInit(void)
 {
-	return RegisterDebugOpr(&s_tNetPrintDebugOpr);
+    return RegisterDebugOpr(&g_tNetDbgOpr);
 }
-

@@ -8,167 +8,248 @@
 #include <linux/fb.h>
 #include <string.h>
 
-static int s_FBFD;
-static int s_ScreenSize;
-static int s_LineWidth;
-static int s_PixelWidth;
-static struct fb_var_screeninfo s_tVar;
-static struct fb_fix_screeninfo s_tFix;
-static unsigned char *s_pFbmem;
-
 static int FBDeviceInit(void);
-static int FBShowPixel(int PenX, int PenY, unsigned int Color);
-static int FBCleanScreen(unsigned int BackColor);
+static int FBShowPixel(int iX, int iY, unsigned int dwColor);
+static int FBCleanScreen(unsigned int dwBackColor);
 static int FBShowPage(PT_VideoMem ptVideoMem);
 
-static T_DispOpr s_tFBDispOpr = {
-	.name         = "fb",
-	.DeviceInit   = FBDeviceInit,
-	.ShowPixel    = FBShowPixel,
-	.CleanScreen  = FBCleanScreen,
-	.ShowPage	  = FBShowPage,
+
+static int g_fd;
+
+static struct fb_var_screeninfo g_tFBVar;
+static struct fb_fix_screeninfo g_tFBFix;
+static unsigned char *g_pucFBMem;
+static unsigned int g_dwScreenSize;
+
+static unsigned int g_dwLineWidth;
+static unsigned int g_dwPixelWidth;
+
+static T_DispOpr g_tFBOpr = {
+    .name        = "fb",
+    .DeviceInit  = FBDeviceInit,
+    .ShowPixel   = FBShowPixel,
+    .CleanScreen = FBCleanScreen,
+    .ShowPage    = FBShowPage,
 };
 
-/* LCD设备初始化函数 */
+/**********************************************************************
+ * 函数名称： FBDeviceInit
+ * 功能描述： "framebuffer显示设备"的初始化函数
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static int FBDeviceInit(void)
 {
-	/* 打开设备：支持读写 */
-	s_FBFD = open(FB_DEVICE_NAME, O_RDWR);
-	write(s_FBFD,"\033[9;0]",8);//加入解决黑屏问题，原理还不清楚
-	if (s_FBFD < 0) {
-		DBG_PRINTF("can not open %s , err code :%d\n", FB_DEVICE_NAME, s_FBFD);
-		return -1;
-	}
+    int ret;
 
-	/* 获得可变信息 */
-	if (ioctl(s_FBFD, FBIOGET_VSCREENINFO, &s_tVar)) {
-		DBG_PRINTF("can not get s_tVar\n");
-		return -1;
-	}
+    g_fd = open(FB_DEVICE_NAME, O_RDWR);
+    write(g_fd,"\033[9;0]",8);//加入解决黑屏问题，原理还不清楚
+    if (0 > g_fd)
+    {
+        DBG_PRINTF("can't open %s\n", FB_DEVICE_NAME);
+    }
 
-	/* 获得固定信息 */
-	if (ioctl(s_FBFD, FBIOGET_FSCREENINFO, &s_tFix)) {
-		DBG_PRINTF("can not get s_tVar\n");
-		return -1;
-	}
-	
-	s_ScreenSize = s_tVar.xres * s_tVar.yres * s_tVar.bits_per_pixel / 8; // 屏幕总像素所占的字节数
-	s_LineWidth   = s_tVar.xres * s_tVar.bits_per_pixel / 8;	// 每行像素所占的字节数
-	s_PixelWidth  = s_tVar.bits_per_pixel / 8;	// 每个像素所占字节数
+    ret = ioctl(g_fd, FBIOGET_VSCREENINFO, &g_tFBVar);
+    if (ret < 0)
+    {
+        DBG_PRINTF("can't get fb's var\n");
+        return -1;
+    }
 
-	s_tFBDispOpr.Xres 		= s_tVar.xres;
-	s_tFBDispOpr.Yres 		= s_tVar.yres;
-	s_tFBDispOpr.Bpp   		= s_tVar.bits_per_pixel;
-	s_tFBDispOpr.LineWidth = s_LineWidth;
-    DBG_PRINTF("xres %d yres %d \n",s_tFBDispOpr.Xres,s_tFBDispOpr.Yres);
-	/* 直接映射到内存的Framebuffer */
-	s_pFbmem = (unsigned char *)mmap(NULL, s_ScreenSize, PROT_READ | PROT_WRITE, MAP_SHARED, s_FBFD, 0);
-	if (s_pFbmem == (unsigned char *)-1) {
-		DBG_PRINTF("can not mmap\n");
-		return -1;
-	}
-	s_tFBDispOpr.pDispMem = s_pFbmem;
+    ret = ioctl(g_fd, FBIOGET_FSCREENINFO, &g_tFBFix);
+    if (ret < 0)
+    {
+        DBG_PRINTF("can't get fb's fix\n");
+        return -1;
+    }
 
-	return 0;
+    g_dwScreenSize = g_tFBVar.xres * g_tFBVar.yres * g_tFBVar.bits_per_pixel / 8;
+    g_pucFBMem = (unsigned char *)mmap(NULL , g_dwScreenSize, PROT_READ | PROT_WRITE, MAP_SHARED, g_fd, 0);
+    if (0 > g_pucFBMem)
+    {
+        DBG_PRINTF("can't mmap\n");
+        return -1;
+    }
+
+    g_tFBOpr.iXres       = g_tFBVar.xres;
+    g_tFBOpr.iYres       = g_tFBVar.yres;
+    g_tFBOpr.iBpp        = g_tFBVar.bits_per_pixel;
+    g_tFBOpr.iLineWidth  = g_tFBVar.xres * g_tFBOpr.iBpp / 8;
+    g_tFBOpr.pucDispMem  = g_pucFBMem;
+
+    g_dwLineWidth  = g_tFBVar.xres * g_tFBVar.bits_per_pixel / 8;
+    g_dwPixelWidth = g_tFBVar.bits_per_pixel / 8;
+
+    return 0;
 }
 
-/* LCD像素显示函数 */
-static int FBShowPixel(int PenX, int PenY, unsigned int Color)
+
+/**********************************************************************
+ * 函数名称： FBShowPixel
+ * 功能描述： 设置FrameBuffer的指定象素为某颜色
+ * 输入参数： iX - 象素的X坐标
+ *            iX - 象素的Y坐标
+ *            dwColor - 颜色值,格式为32Bpp,即0x00RRGGBB
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static int FBShowPixel(int iX, int iY, unsigned int dwColor)
 {
-	unsigned char  *pPen8;
-	unsigned short *pPen16;
-	unsigned int   *pPen32;
-	unsigned int	red, green, blue;
-	
-	if ((PenX >= s_tVar.xres) || (PenY >= s_tVar.yres))
-	{
-		DBG_PRINTF("out of region\n");
-		return -1;
-	}
+    unsigned char *pucFB;
+    unsigned short *pwFB16bpp;
+    unsigned int *pdwFB32bpp;
+    unsigned short wColor16bpp; /* 565 */
+    int iRed;
+    int iGreen;
+    int iBlue;
 
-	/* 该坐标在内存中对应像素的位置 */
-	pPen8  = s_pFbmem + PenY * s_LineWidth + PenX * s_PixelWidth;
-	pPen16 = (unsigned short *)pPen8;
-	pPen32 = (unsigned int   *)pPen8;
+    if ((iX >= g_tFBVar.xres) || (iY >= g_tFBVar.yres))
+    {
+        DBG_PRINTF("out of region\n");
+        return -1;
+    }
 
-	switch (s_tFBDispOpr.Bpp) {
-	case 8:
-		*pPen8 = (unsigned char)Color;
-		break;
-	case 16:
-		/* RGB:565 */
-		red      = ((Color >> 16) & 0xff) >> 3;
-		green    = ((Color >> 8 )  & 0xff) >> 2;
-		blue     = ((Color >> 0 )  & 0xff) >> 3;
-		*pPen16  = (red << 11) | (green << 5) | blue;
-		break;
-	case 32:
-		*pPen32 = Color;
-		break;
-	default:
-		DBG_PRINTF("can not surport %d bpp\n", s_tFBDispOpr.Bpp);
-		return -1;
-	}
+    pucFB      = g_pucFBMem + g_dwLineWidth * iY + g_dwPixelWidth * iX;
+    pwFB16bpp  = (unsigned short *)pucFB;
+    pdwFB32bpp = (unsigned int *)pucFB;
 
-	return 0;
+    switch (g_tFBVar.bits_per_pixel)
+    {
+        case 8:
+        {
+            *pucFB = (unsigned char)dwColor;
+            break;
+        }
+        case 16:
+        {
+            /* 从dwBackColor中取出红绿蓝三原色,
+             * 构造为16Bpp的颜色
+             */
+            iRed   = (dwColor >> (16+3)) & 0x1f;
+            iGreen = (dwColor >> (8+2)) & 0x3f;
+            iBlue  = (dwColor >> 3) & 0x1f;
+            wColor16bpp = (iRed << 11) | (iGreen << 5) | iBlue;
+            *pwFB16bpp	= wColor16bpp;
+            break;
+        }
+        case 32:
+        {
+            *pdwFB32bpp = dwColor;
+            break;
+        }
+        default :
+        {
+            DBG_PRINTF("can't support %d bpp\n", g_tFBVar.bits_per_pixel);
+            return -1;
+        }
+    }
+
+    return 0;
 }
 
-/* 清屏函数 */
-static int FBCleanScreen(unsigned int BackColor)
-{
-	int i;
-	unsigned char  *pPen8;
-	unsigned short *pPen16;
-	unsigned int   *pPen32;
-	unsigned int	red, green, blue;
-
-	pPen8  = s_pFbmem;
-	pPen16 = (unsigned short *)pPen8;
-	pPen32 = (unsigned int   *)pPen8;
-
-	switch (s_tFBDispOpr.Bpp) {
-	case 8:
-		memset(pPen8, BackColor, s_ScreenSize);
-		break;
-	case 16:
-		/* RGB:565 */
-		red      = ((BackColor >> 16) & 0xffff) >> 3;
-		green    = ((BackColor >> 8 )  & 0xffff) >> 2;
-		blue     = ((BackColor >> 0 )  & 0xffff) >> 3;
-		BackColor = (red << 11) | (green << 5) | blue;
-		
-		for (i = 0; i < s_ScreenSize;) {
-			*pPen16 = BackColor;
-			pPen16++;
-			i += 2;
-		}
-		break;
-	case 32:
-		for (i = 0; i < s_ScreenSize;) {
-			*pPen32 = BackColor;
-			pPen32++;
-			i += 4;
-		}
-		break;
-	default:
-		DBG_PRINTF("can not surport %dbpp\n", s_tFBDispOpr.Bpp);
-		return -1;
-	}
-
-	return 0;
-}
-
-//针对界面显示，把ptVideoMem中像素数据复制到ptVideoMem,这个又是mmap到framebuffer中，所以可以直接显示
+/**********************************************************************
+ * 函数名称： FBShowPage
+ * 功能描述： 把PT_VideoMem中的颜色数据在FrameBuffer上显示出来
+ * 输入参数： ptVideoMem - 内含整屏的象素数据
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static int FBShowPage(PT_VideoMem ptVideoMem)
 {
-	memcpy(s_tFBDispOpr.pDispMem, ptVideoMem->tPixelDatas.PixelDatas, 
-			ptVideoMem->tPixelDatas.TotalBytes);
-
-	return 0;
+    memcpy(g_tFBOpr.pucDispMem, ptVideoMem->tPixelDatas.aucPixelDatas, ptVideoMem->tPixelDatas.iTotalBytes);
+    return 0;
 }
 
+/**********************************************************************
+ * 函数名称： FBCleanScreen
+ * 功能描述： "framebuffer显示设备"的清屏函数
+ * 输入参数： dwBackColor - 整个屏幕设置为该颜色
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static int FBCleanScreen(unsigned int dwBackColor)
+{
+    unsigned char *pucFB;
+    unsigned short *pwFB16bpp;
+    unsigned int *pdwFB32bpp;
+    unsigned short wColor16bpp; /* 565 */
+    int iRed;
+    int iGreen;
+    int iBlue;
+    int i = 0;
+
+    pucFB      = g_pucFBMem;
+    pwFB16bpp  = (unsigned short *)pucFB;
+    pdwFB32bpp = (unsigned int *)pucFB;
+
+    switch (g_tFBVar.bits_per_pixel)
+    {
+        case 8:
+        {
+            memset(g_pucFBMem, dwBackColor, g_dwScreenSize);
+            break;
+        }
+        case 16:
+        {
+            /* 从dwBackColor中取出红绿蓝三原色,
+             * 构造为16Bpp的颜色
+             */
+            iRed   = (dwBackColor >> (16+3)) & 0x1f;
+            iGreen = (dwBackColor >> (8+2)) & 0x3f;
+            iBlue  = (dwBackColor >> 3) & 0x1f;
+            wColor16bpp = (iRed << 11) | (iGreen << 5) | iBlue;
+            while (i < g_dwScreenSize)
+            {
+                *pwFB16bpp	= wColor16bpp;
+                pwFB16bpp++;
+                i += 2;
+            }
+            break;
+        }
+        case 32:
+        {
+            while (i < g_dwScreenSize)
+            {
+                *pdwFB32bpp	= dwBackColor;
+                pdwFB32bpp++;
+                i += 4;
+            }
+            break;
+        }
+        default :
+        {
+            DBG_PRINTF("can't support %d bpp\n", g_tFBVar.bits_per_pixel);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+/**********************************************************************
+ * 函数名称： FBInit
+ * 功能描述： 注册"framebuffer显示设备"
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 int FBInit(void)
 {
-	return RegisterDispOpr(&s_tFBDispOpr);
+    return RegisterDispOpr(&g_tFBOpr);
 }
-

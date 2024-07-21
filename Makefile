@@ -40,7 +40,7 @@ DISTNAME      = PicturePro1.0.0
 DISTDIR = /home/zhao/qrs_study/imx6ull_pro/PicturePro/tmp_release/PicturePro1.0.0
 LINK          = arm-buildroot-linux-gnueabihf-g++
 LFLAGS        = 
-LIBS          = $(SUBLIBS) -lfreetype -lm -lpthread -lts -ljpeg   
+LIBS          = $(SUBLIBS) -lfreetype -lm -lpthread -lts -ljpeg -lpng   
 AR            = arm-buildroot-linux-gnueabihf-ar cqs
 RANLIB        = 
 SED           = sed
@@ -82,6 +82,7 @@ SOURCES       = debug/debug_manager.c \
 		render/format/bmp.c \
 		render/format/jpg.c \
 		render/format/picfmt_manager.c \
+		render/format/png.c \
 		render/operation/merge.c \
 		render/operation/zoom.c \
 		render/render.c 
@@ -115,6 +116,7 @@ OBJECTS       = tmp_release/debug_manager.o \
 		tmp_release/bmp.o \
 		tmp_release/jpg.o \
 		tmp_release/picfmt_manager.o \
+		tmp_release/png.o \
 		tmp_release/merge.o \
 		tmp_release/zoom.o \
 		tmp_release/render.o
@@ -290,6 +292,7 @@ DIST          = icon/browse_mode.bmp \
 		render/format/bmp.c \
 		render/format/jpg.c \
 		render/format/picfmt_manager.c \
+		render/format/png.c \
 		render/operation/merge.c \
 		render/operation/zoom.c \
 		render/render.c
@@ -800,6 +803,16 @@ tmp_release/picfmt_manager.o: render/format/picfmt_manager.c include/config.h \
 		include/input_manager.h \
 		include/disp_manager.h
 	$(CC) -c $(CFLAGS) $(INCPATH) -o tmp_release/picfmt_manager.o render/format/picfmt_manager.c
+
+tmp_release/png.o: render/format/png.c include/config.h \
+		include/debug_manager.h \
+		include/pic_operation.h \
+		include/file.h \
+		include/picfmt_manager.h \
+		include/page_manager.h \
+		include/input_manager.h \
+		include/disp_manager.h
+	$(CC) -c $(CFLAGS) $(INCPATH) -o tmp_release/png.o render/format/png.c
 
 tmp_release/merge.o: render/operation/merge.c include/pic_operation.h \
 		include/file.h \

@@ -4638,8 +4638,8 @@ static int ASCIIFontInit(char *pFontFile, unsigned int FontSize)
 
 static int ASCIIGetFontBitmap(unsigned int Code, PT_FontBitMap ptFontBitMap)
 {
-	int PenX = ptFontBitMap->CurOriginX;
-	int PenY = ptFontBitMap->CurOriginY;
+    int PenX = ptFontBitMap->iCurOriginX;
+    int PenY = ptFontBitMap->iCurOriginY;
 	
 	if (Code > (unsigned int)0x80)
 	{
@@ -4647,16 +4647,16 @@ static int ASCIIGetFontBitmap(unsigned int Code, PT_FontBitMap ptFontBitMap)
 		return -1;
 	}
 
-	ptFontBitMap->XLeft    = PenX;
-	ptFontBitMap->YTop     = PenY - 16;
-	ptFontBitMap->XMax     = PenX + 8;
-	ptFontBitMap->YMax     = PenY;
-	ptFontBitMap->Bpp      = 1;
-	ptFontBitMap->Pitch    = 1;
-	ptFontBitMap->pBuffer = (unsigned char *)&fontdata_8x16[Code * 16];;	
+    ptFontBitMap->iXLeft    = PenX;
+    ptFontBitMap->iYTop     = PenY - 16;
+    ptFontBitMap->iXMax     = PenX + 8;
+    ptFontBitMap->iYMax     = PenY;
+    ptFontBitMap->iBpp      = 1;
+    ptFontBitMap->iPitch    = 1;
+    ptFontBitMap->pucBuffer = (unsigned char *)&fontdata_8x16[Code * 16];;
 
-	ptFontBitMap->NextOriginX = PenX + 8;
-	ptFontBitMap->NextOriginY = PenY;
+    ptFontBitMap->iNextOriginX = PenX + 8;
+    ptFontBitMap->iNextOriginY = PenY;
 	
 	return 0;
 }

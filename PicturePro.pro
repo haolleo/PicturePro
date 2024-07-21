@@ -38,6 +38,7 @@ SOURCES += \
     render/format/bmp.c \
     render/format/jpg.c \
     render/format/picfmt_manager.c \
+    render/format/png.c \
     render/operation/merge.c \
     render/operation/zoom.c \
     render/render.c
@@ -93,4 +94,4 @@ DISTFILES += \
      icon/zoomout.bmp
 
 LIBS += \
-     -lfreetype -lm -lpthread -lts -ljpeg
+     -lfreetype -lm -lpthread -lts -ljpeg -lpng

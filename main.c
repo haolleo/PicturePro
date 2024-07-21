@@ -1,121 +1,93 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <include/config.h>
+#include <include/encoding_manager.h>
+#include <include/fonts_manager.h>
+#include <include/disp_manager.h>
+#include <include/input_manager.h>
+#include <include/pic_operation.h>
+#include <include/render.h>
 #include <string.h>
+#include <include/picfmt_manager.h>
+
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <unistd.h>
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 
-#include "include/config.h"
-#include "include/page_manager.h"
-#include "include/encoding_manager.h"
-#include "include/fonts_manager.h"
-#include "include/disp_manager.h"
-#include "include/input_manager.h"
-#include "include/debug_manager.h"
-#include "include/pic_operation.h"
-#include "include/picfmt_manager.h"
-#include "include/render.h"
 
-const char* kFontFile = "./MSYH.TTF"; //调试使用
+/* digitpic <freetype_file> */
+const char kFontFile[10] = "./MSYH.TTF";
 int main(int argc, char **argv)
 {
-	int error;
-	/* 初始化调试系统 */
-	error = DebugInit();
-	if (error) {
-		printf(APP_ERR"DebugInit error! File:%s Line:%d\n", __FILE__, __LINE__);
-		return -1;
-	}
-	
-	error = InitDebugChanel();
-	if (error) {
-		printf(APP_ERR"InitDebugChanel error! File:%s Line:%d\n", __FILE__, __LINE__);
-		return -1;
-	}
+    int iError;
+
+    /* 初始化调试模块: 可以通过"标准输出"也可以通过"网络"打印调试信息
+     * 因为下面马上就要用到DBG_PRINTF函数, 所以先初始化调试模块
+     */
+
+    /* 注册调试通道 */
+    DebugInit();
+
+    /* 初始化调试通道 */
+    InitDebugChanel();
 
     if (argc != 1)
-	{
-		DBG_PRINTF("Usage:\n");
+    {
+        DBG_PRINTF("Usage:\n");
         DBG_PRINTF("%s <freetype_file>\n", argv[0]);
-		return 0;
-	}
+        return 0;
+    }
 
-	/* 初始化显示设备 */
-	error = DisplayInit();
-	if (error) {
-		DebugPrint(APP_ERR"DisplayInit error! File:%s Line:%d\n", __FILE__, __LINE__);
-		return -1;
-	}
+    /* 注册显示设备 */
+    DisplayInit();
+    /* 可能可支持多个显示设备: 选择和初始化指定的显示设备 */
+    SelectAndInitDefaultDispDev("fb");
 
-	/* 选择和初始默认的设备 */
-	SelectAndInitDefaultDispDev("fb");
-	
-	/* 初始化输入子系统 */
-	error = InputInit();
-	if (error) {
-		DebugPrint(APP_ERR"InputInit error! File:%s Line:%d\n", __FILE__, __LINE__);
-		return -1;
-	}
+    /*
+     * VideoMem: 为加快显示速度,我们事先在内存中构造好显示的页面的数据,
+                 (这个内存称为VideoMem)
+     *           显示时再把VideoMem中的数据复制到设备的显存上
+     * 参数的含义就是分配的多少个VideoMem
+     * 参数可取为0, 这意味着所有的显示数据都是在显示时再现场生成,然后写入显存
+     */
+    AllocVideoMem(5);
 
-	/* 初始化输入设备 */
-	error = AllInputDeviceInit();
-	if (error) {
-		DebugPrint(APP_ERR"AllInputDeviceInit error! File:%s Line:%d\n", __FILE__, __LINE__);
-		return -1;
-	}
+    /* 注册输入设备 */
+    InputInit();
+    /* 调用所有输入设备的初始化函数 */
+    AllInputDevicesInit();
 
-	/* 初始化字符编码系统 */
-	error = FontsInit();
-	if (error)
-	{
-		DBG_PRINTF("FontsInit error!\n");
-	}
+    /* 注册编码模块 */
+    EncodingInit();
 
-	/* 初始化具体的字符编码文件 */
-    error = SetFontsDetail("freetype", kFontFile, 24);
-	if (error)
-	{
-		DBG_PRINTF("SetFontsDetail error!\n");
-	}
+    /* 注册字库模块 */
+    iError = FontsInit();
+    if (iError)
+    {
+        DBG_PRINTF("FontsInit error!\n");
+    }
 
-	/* 分配页面内存 */
-	error = AllocVideoMem(5);
-	if (error) {
-		DebugPrint(APP_ERR"AllocVideoMem error! File:%s Line:%d\n", __FILE__, __LINE__);
-		return -1;
-	}
+    /* 设置freetype字库所用的文件和字体尺寸 */
+    iError = SetFontsDetail("freetype", kFontFile, 24);
+    if (iError)
+    {
+        DBG_PRINTF("SetFontsDetail error!\n");
+    }
 
-	/* 初始化页面系统 */
-	error = EncodingInit();
-	if (error) {
-		DebugPrint(APP_ERR"EncodingInit error! File:%s Line:%d\n", __FILE__, __LINE__);
-		return -1;
-	}
+    /* 注册图片文件解析模块 */
+    PicFmtsInit();
 
-	ShowEncodingOpr();
-	
-	/* 初始化页面系统 */
-	error = PagesInit();
-	if (error) {
-		DebugPrint(APP_ERR"PagesInit error! File:%s Line:%d\n", __FILE__, __LINE__);
-		return -1;
-	}
+    /* 注册页面 */
+    PagesInit();
 
-	
-	/*  */
-	error = PicFmtsInit();
-	if (error) {
-		DebugPrint(APP_ERR"PagesInit error! File:%s Line:%d\n", __FILE__, __LINE__);
-		return -1;
-	}
+    /* 运行主页面 */
+    Page("main")->Run(NULL);
 
-	//ShowPages();
-	/* 显示主页面 */
-	Page("main")->Run(NULL);
-	return 0;
+    return 0;
 }
-

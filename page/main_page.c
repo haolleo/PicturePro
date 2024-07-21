@@ -1,244 +1,280 @@
 
-/**
- * @file  main_page.c
- * @brief 主页面显示文件
- * @version 2.0 （版本声明）
- * @author Dk
- * @date  July 11,2020
- */
+#include <include/config.h>
+#include <include/render.h>
 #include <stdlib.h>
- 
-#include "include/config.h"
-#include "include/page_manager.h"
-#include "include/input_manager.h"
-#include "include/render.h"
-#include "include/debug_manager.h"
-#include "include/input_manager.h"
-#include "include/disp_manager.h"
 
-/**
- * @Description: 显示main_page页面信息
- * @param pName - 寻找结构体的名字
- * @return 0
- */
-static T_Layout s_tMainPageIconLayout[] = {
-	{"browse_mode.bmp",  0, 0, 0, 0},
-	{"continue_mod.bmp", 0, 0, 0, 0},
-	{"setting.bmp",      0, 0, 0, 0},
-	{NULL, 				 0, 0, 0, 0},	//结尾标志
+static T_Layout g_atMainPageIconsLayout[] = {
+    {0, 0, 0, 0, "browse_mode.bmp"},
+    {0, 0, 0, 0, "continue_mod.bmp"},
+    {0, 0, 0, 0, "setting.bmp"},
+    {0, 0, 0, 0, NULL},
 };
 
-static T_PageLayout s_tMainPageLayout = {
-	.MaxTotalBytes = 0,
-	.ptLayout       = s_tMainPageIconLayout,
+static T_PageLayout g_tMainPageLayout = {
+    .iMaxTotalBytes = 0,
+    .atLayout       = g_atMainPageIconsLayout,
 };
 
-/* 计算各图标坐标值 */
-// ？？？设计有问题，不可能用 [0][1][2]这样的设计
+
+/**********************************************************************
+ * 函数名称： CalcMainPageLayout
+ * 功能描述： 计算页面中各图标座标值
+ * 输入参数： 无
+ * 输出参数： ptPageLayout - 内含各图标的左上角/右下角座标值
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static void  CalcMainPageLayout(PT_PageLayout ptPageLayout)
 {
-	int startY;
-	int width;
-	int height;
-	int xres, yres, bpp;
-	int TmpTotalBytes;
-	PT_Layout ptLayout;
+    int iStartY;
+    int iWidth;
+    int iHeight;
+    int iXres, iYres, iBpp;
+    int iTmpTotalBytes;
+    PT_Layout atLayout;
 
-	ptLayout = ptPageLayout->ptLayout;
-	GetDispResolution(&xres, &yres, &bpp);
-	ptPageLayout->bpp = bpp;
+    atLayout = ptPageLayout->atLayout;
+    GetDispResolution(&iXres, &iYres, &iBpp);
+    ptPageLayout->iBpp = iBpp;
 
-	/*   
-	 *    ----------------------
-	 *                           1/2 * height
-	 *          browse_mode.bmp  height
-	 *                           1/2 * height
-	 *         continue_mod.bmp     height
-	 *                           1/2 * height
-	 *          setting.bmp       height
-	 *                           1/2 * height
-	 *    ----------------------
-	 */
-	 
-	height = yres * 2 / 10;
-    width  = 2*height; //宽是2倍高
-	startY = height / 2;
-	
-	/* select_fold图标 */
-	ptLayout[0].TopLeftY  = startY;
-	ptLayout[0].BotRightY = ptLayout[0].TopLeftY + height - 1;
-    ptLayout[0].TopLeftX  = (xres - width ) / 2;
-    ptLayout[0].BotRightX = ptLayout[0].TopLeftX + width  - 1;
+    /*
+     *    ----------------------
+     *                           1/2 * iHeight
+     *          browse_mode.bmp  iHeight
+     *                           1/2 * iHeight
+     *         continue_mod.bmp     iHeight
+     *                           1/2 * iHeight
+     *          setting.bmp       iHeight
+     *                           1/2 * iHeight
+     *    ----------------------
+     */
 
-	TmpTotalBytes = (ptLayout[0].BotRightX - ptLayout[0].TopLeftY + 1) * (ptLayout[0].BotRightY - ptLayout[0].TopLeftY + 1) * bpp / 8;
-	if (ptPageLayout->MaxTotalBytes < TmpTotalBytes)
-	{
-		ptPageLayout->MaxTotalBytes = TmpTotalBytes;
-	}
+    iHeight = iYres * 2 / 10;
+    iWidth  = iHeight;
+    iStartY = iHeight / 2;
+
+    /* select_fold图标 */
+    atLayout[0].iTopLeftY  = iStartY;
+    atLayout[0].iBotRightY = atLayout[0].iTopLeftY + iHeight - 1;
+    atLayout[0].iTopLeftX  = (iXres - iWidth * 2) / 2;
+    atLayout[0].iBotRightX = atLayout[0].iTopLeftX + iWidth * 2 - 1;
+
+    iTmpTotalBytes = (atLayout[0].iBotRightX - atLayout[0].iTopLeftX + 1) * (atLayout[0].iBotRightY - atLayout[0].iTopLeftY + 1) * iBpp / 8;
+    if (ptPageLayout->iMaxTotalBytes < iTmpTotalBytes)
+    {
+        ptPageLayout->iMaxTotalBytes = iTmpTotalBytes;
+    }
 
 
-	/* interval图标 */
-	ptLayout[1].TopLeftY  = ptLayout[0].BotRightY + height / 2 + 1;
-	ptLayout[1].BotRightY = ptLayout[1].TopLeftY + height - 1;
-    ptLayout[1].TopLeftX  = (xres - width) / 2;
-    ptLayout[1].BotRightX = ptLayout[1].TopLeftX + width - 1;
+    /* interval图标 */
+    atLayout[1].iTopLeftY  = atLayout[0].iBotRightY + iHeight / 2 + 1;
+    atLayout[1].iBotRightY = atLayout[1].iTopLeftY + iHeight - 1;
+    atLayout[1].iTopLeftX  = (iXres - iWidth * 2) / 2;
+    atLayout[1].iBotRightX = atLayout[1].iTopLeftX + iWidth * 2 - 1;
 
-	TmpTotalBytes = (ptLayout[1].BotRightX - ptLayout[1].TopLeftX + 1) * (ptLayout[1].BotRightY - ptLayout[1].TopLeftY + 1) * bpp / 8;
-	if (ptPageLayout->MaxTotalBytes < TmpTotalBytes)
-	{
-		ptPageLayout->MaxTotalBytes = TmpTotalBytes;
-	}
+    iTmpTotalBytes = (atLayout[1].iBotRightX - atLayout[1].iTopLeftX + 1) * (atLayout[1].iBotRightY - atLayout[1].iTopLeftY + 1) * iBpp / 8;
+    if (ptPageLayout->iMaxTotalBytes < iTmpTotalBytes)
+    {
+        ptPageLayout->iMaxTotalBytes = iTmpTotalBytes;
+    }
 
-	/* return图标 */
-	ptLayout[2].TopLeftY  = ptLayout[1].BotRightY + height / 2 + 1;
-	ptLayout[2].BotRightY = ptLayout[2].TopLeftY + height - 1;
-    ptLayout[2].TopLeftX  = (xres - width ) / 2;
-    ptLayout[2].BotRightX = ptLayout[2].TopLeftX + width - 1;
+    /* return图标 */
+    atLayout[2].iTopLeftY  = atLayout[1].iBotRightY + iHeight / 2 + 1;
+    atLayout[2].iBotRightY = atLayout[2].iTopLeftY + iHeight - 1;
+    atLayout[2].iTopLeftX  = (iXres - iWidth * 2) / 2;
+    atLayout[2].iBotRightX = atLayout[2].iTopLeftX + iWidth * 2 - 1;
 
-	TmpTotalBytes = (ptLayout[2].BotRightX - ptLayout[2].TopLeftX + 1) * (ptLayout[2].BotRightY - ptLayout[2].TopLeftY + 1) * bpp / 8;
-	//最大图片的大小在这里赋值
-	if (ptPageLayout->MaxTotalBytes < TmpTotalBytes)
-	{
-		ptPageLayout->MaxTotalBytes = TmpTotalBytes;
-	}
+    iTmpTotalBytes = (atLayout[2].iBotRightX - atLayout[2].iTopLeftX + 1) * (atLayout[2].iBotRightY - atLayout[2].iTopLeftY + 1) * iBpp / 8;
+    if (ptPageLayout->iMaxTotalBytes < iTmpTotalBytes)
+    {
+        ptPageLayout->iMaxTotalBytes = iTmpTotalBytes;
+    }
 
 }
 
+
+/**********************************************************************
+ * 函数名称： MainPageGetInputEvent
+ * 功能描述： 为"主页面"获得输入数据,判断输入事件位于哪一个图标上
+ * 输入参数： ptPageLayout - 内含多个图标的显示区域
+ * 输出参数： ptInputEvent - 内含得到的输入数据
+ * 返 回 值： -1     - 输入数据不位于任何一个图标之上
+ *            其他值 - 输入数据所落在的图标(PageLayout->atLayout数组的哪一项)
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static int MainPageGetInputEvent(PT_PageLayout ptPageLayout, PT_InputEvent ptInputEvent)
 {
-	return GenericGetInputEvent(ptPageLayout, ptInputEvent);
+    return GenericGetInputEvent(ptPageLayout, ptInputEvent);
 }
 
+
+/**********************************************************************
+ * 函数名称： ShowMainPage
+ * 功能描述： 显示"主页面"
+ * 输入参数： ptPageLayout - 内含多个图标的文件名和显示区域
+ * 输出参数： 无
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static void ShowMainPage(PT_PageLayout ptPageLayout)
 {
-	int error;
-	PT_VideoMem ptVideoMem;
+    PT_VideoMem ptVideoMem;
+    int iError;
 
-	PT_Layout ptLayout;
+    PT_Layout atLayout = ptPageLayout->atLayout;
 
-	/* 获得显存 */
-	ptVideoMem = GetVideoMem(ID("main"), 1);
-	if (ptVideoMem == NULL) {
-		DebugPrint(APP_ERR"Can not get video mem for main_page!\n");
-		return ;
-	}
+    /* 1. 获得显存 */
+    ptVideoMem = GetVideoMem(ID("main"), 1);
+    if (ptVideoMem == NULL)
+    {
+        DBG_PRINTF("can't get video mem for main page!\n");
+        return;
+    }
 
-	ptLayout = ptPageLayout->ptLayout;
-	
-	/* 描画数据 */
-	/* 如果还没有计算过各图标的坐标 */
-	if (ptLayout[0].TopLeftX == 0)
-		CalcMainPageLayout(ptPageLayout);
+    /* 2. 描画数据 */
 
-    //将各个图标的值放入准备的显存空间
-	error = GeneratePage(ptPageLayout, ptVideoMem);
-	
-	/* 刷新/加载到设备 */
-	FlushVideoMemToDev(ptVideoMem);
+    /* 如果还没有计算过各图标的坐标 */
+    if (atLayout[0].iTopLeftX == 0)
+    {
+        CalcMainPageLayout(ptPageLayout);
+    }
 
-	/* 设置页面内存为空闲状态 */
-	PutVideoMem(ptVideoMem);
+    iError = GeneratePage(ptPageLayout, ptVideoMem);
+    (void)iError;
+
+    /* 3. 刷到设备上去 */
+    FlushVideoMemToDev(ptVideoMem);
+
+    /* 4. 解放显存 */
+    PutVideoMem(ptVideoMem);
 }
 
-/**
- * @Description: main_page主页面
- * @param pName - 寻找结构体的名字
- * @return 0
- */
-static int MainPageRun(PT_PageParams ptParentPageParams)
+
+/**********************************************************************
+ * 函数名称： MainPageRun
+ * 功能描述： "主页面"的运行函数: 显示菜单图标,根据用户输入作出反应
+ * 输入参数： ptParentPageParams - 未用
+ * 输出参数： 无
+ * 返 回 值： 无
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
+static void MainPageRun(PT_PageParams ptParentPageParams)
 {
-	int index;
-	int pressured;
-	int indexPressured;
-	T_InputEvent tInputEvent;	
+    int iIndex;
+    T_InputEvent tInputEvent;
+    int bPressed = 0;
+    int iIndexPressed = -1;
     T_PageParams tPageParams;
 
-	
     tPageParams.iPageID = ID("main");
-	
-	/* 显示页面 */
-	ShowMainPage(&s_tMainPageLayout);
 
-	index = -1;
-	indexPressured = -1;
-	pressured = 0;
-	/* 调用GetInputEvent(), 获得输入事件，进而处理 */
-	while (1) {
-		index = MainPageGetInputEvent(&s_tMainPageLayout, &tInputEvent);
-		
-		/* 松开和按下不在同一个图标范围内 */
-        // 压力pressure为0意味着此时是松开状态
-		if (tInputEvent.pressure == 0) {
-			
-			/* 曾经有按键按下 */
-			if (pressured) {
-				ReleaseButton(&s_tMainPageIconLayout[indexPressured]);
-				pressured = 0;
+    /* 1. 显示页面 */
+    ShowMainPage(&g_tMainPageLayout);
 
-                /* 松开与按下的按键为同一个 */
-                //按下不会有反应，只有松下的时候，进行检测之前是否按下，如果按下，且位置一致，那么认为该松下是按下相对应的
-				if (indexPressured == index) {
-					switch (indexPressured) {
-					case 0: /* 浏览按钮 */
-						tPageParams.strCurPictureFile[0] = '\0';
-						Page("manual")->Run(&tPageParams);
-                        //manual退出后来到这里
-						/* 从设置页面返回后显示当首的主页面 */
-						ShowMainPage(&s_tMainPageLayout);
+    /* 2. 创建Prepare线程 */
 
-						break;
-						
-					case 1:		/* auto_page */
-						Page("auto")->Run(&tPageParams);
+    /* 3. 调用GetInputEvent获得输入事件，进而处理 */
+    while (1)
+    {
+        iIndex = MainPageGetInputEvent(&g_tMainPageLayout, &tInputEvent);
+        if (tInputEvent.iPressure == 0)
+        {
+            /* 如果是松开 */
+            if (bPressed)
+            {
+                /* 曾经有按钮被按下 */
+                ReleaseButton(&g_atMainPageIconsLayout[iIndexPressed]);
+                bPressed = 0;
 
-						/* 返回主页面 */
-						ShowMainPage(&s_tMainPageLayout);
-						break;
-						
-					case 2:		/* setting_page */
-						Page("setting")->Run(&tPageParams);
+                if (iIndexPressed == iIndex) /* 按下和松开都是同一个按钮 */
+                {
+                    switch (iIndexPressed)
+                    {
+                        case 0: /* 浏览按钮 */
+                        {
+                            Page("browse")->Run(&tPageParams);
 
-						/* 返回主页面 */
-						ShowMainPage(&s_tMainPageLayout);
-						break;
+                            /* 从设置页面返回后显示当首的主页面 */
+                            ShowMainPage(&g_tMainPageLayout);
 
-					default:
-						break;
-					}
-				}
-				
-				indexPressured = -1;
-			}
-		} else {
-			/* 松开和按下都在同一个图标范围内 */
-			/* 按下 */
-			if (index != -1) {
+                            break;
+                        }
+                        case 1: /* 连播按钮 */
+                        {
+                            /* 设置tPageParams.strCurPictureFile[0] = '\0'
+                             * 这样就会使用默认的播放目录
+                             */
+                            tPageParams.strCurPictureFile[0] = '\0';
+                            Page("auto")->Run(&tPageParams);
 
-				/* 之前未按下 */
-				if (!pressured) {
-					pressured = 1;
-					indexPressured = index;
-					PressButton(&s_tMainPageIconLayout[indexPressured]);
-				}
-			}
-		}
-	}
+                            /* 从设置页面返回后显示当首的主页面 */
+                            ShowMainPage(&g_tMainPageLayout);
 
-	return 0;
+                            break;
+                        }
+                        case 2: /* 设置按钮 */
+                        {
+                            Page("setting")->Run(&tPageParams);
+
+                            /* 从设置页面返回后显示当首的主页面 */
+                            ShowMainPage(&g_tMainPageLayout);
+
+                            break;
+                        }
+                        default:
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                iIndexPressed = -1;
+            }
+        }
+        else
+        {
+            /* 按下状态 */
+            if (iIndex != -1)
+            {
+                if (!bPressed)
+                {
+                    /* 未曾按下按钮 */
+                    bPressed = 1;
+                    iIndexPressed = iIndex;
+                    PressButton(&g_atMainPageIconsLayout[iIndexPressed]);
+                }
+            }
+        }
+    }
 }
 
-
-static T_PageAction s_tMainPageAction = {
-	.name 			= "main",
-	.Run 			= MainPageRun,
-	.GetInputEvent = MainPageGetInputEvent,
+static T_PageAction g_tMainPageAction = {
+    .name          = "main",
+    .Run           = MainPageRun,
+    .GetInputEvent = MainPageGetInputEvent,
+    //.Prepare       = MainPagePrepare;
 };
 
-/**
- * @Description: main页面初始化函数，注册该结构体
- * @return 0
- */
+
+/**********************************************************************
+ * 函数名称： MainPageInit
+ * 功能描述： 注册"主页面"
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 int MainPageInit(void)
 {
-	return RegisterPageAction(&s_tMainPageAction);
+    return RegisterPageAction(&g_tMainPageAction);
 }

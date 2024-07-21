@@ -1,106 +1,133 @@
-/**
- * @file  stdin.c
- * @brief 标准输入input设备的处初始化，处理过程与取消
- * @version 1.0 （版本声明）
- * @author Dk
- * @date  July 1,2020
- */
+
+#include <include/input_manager.h>
 #include <termios.h>
 #include <unistd.h>
 #include <stdio.h>
 
-#include "include/input_manager.h"
 
-/**
- * @Description: 获取标准串口输入的初始化，设置模式使其可以采用非阻塞的方式获取输入
- * @return 成功：0
- */
+/**********************************************************************
+ * 函数名称： StdinDevInit
+ * 功能描述： 标准输入模块的设备初始化函数,用于设置标准输入的属性,
+ *            比如默认的标准输入是接收到回车换行符时才返回数据,
+ *            在本程序里把它改为"接收到任意一个字符即返回数据"
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static int StdinDevInit(void)
 {
-	struct termios ttystate;
-	 
-	/* 获得终端的状态 */
-	tcgetattr(STDIN_FILENO, &ttystate);
+    struct termios tTTYState;
 
-	/* 关闭标准模式，并设置位为  1，表示接受最小用户数输入为1 */
-	ttystate.c_lflag &= ~ICANON;	
-	ttystate.c_cc[VMIN] = 1;		
-		
-	/* 设置术语状态 */
-	tcsetattr(STDIN_FILENO, TCSANOW, &ttystate);
+    //get the terminal state
+    tcgetattr(STDIN_FILENO, &tTTYState);
 
-	return 0;
+    //turn off canonical mode
+    tTTYState.c_lflag &= ~ICANON;
+    //minimum of number input read.
+    tTTYState.c_cc[VMIN] = 1;   /* 有一个数据时就立刻返回 */
+
+    //set the terminal attributes.
+    tcsetattr(STDIN_FILENO, TCSANOW, &tTTYState);
+
+    return 0;
 }
 
-/**
- * @Description: 获取标准串口输入的退出，恢复原本的模式
- * @return 成功：0
- */
+/**********************************************************************
+ * 函数名称： StdinDevExit
+ * 功能描述： 标准输入模块的设备退出函数,恢复标准输入的原来属性
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static int StdinDevExit(void)
 {
-	struct termios ttystate;
-	 
-	/* 获得终端的状态 */
-	tcgetattr(STDIN_FILENO, &ttystate);
- 
-	/* 打开标准模式 */
-	ttystate.c_lflag |= ICANON;
 
-	/* 设置术语状态 */
-	tcsetattr(STDIN_FILENO, TCSANOW, &ttystate);
+    struct termios tTTYState;
 
-	return 0;
+    //get the terminal state
+    tcgetattr(STDIN_FILENO, &tTTYState);
+
+    //turn on canonical mode
+    tTTYState.c_lflag |= ICANON;
+
+    //set the terminal attributes.
+    tcsetattr(STDIN_FILENO, TCSANOW, &tTTYState);
+    return 0;
 }
 
-/**
- * @Description: 根据标准输入的结果进行相应处理，采用阻塞的方式获取输入，配合子线程
- * @param ptInputEvent - 表示input设备获取输入事件的结构体.
- * @return 0
- */
+/**********************************************************************
+ * 函数名称： StdinGetInputEvent
+ * 功能描述： 标准输入模块的读取数据函数,它在标准输入模块的子线程中被调用
+ * 输入参数： 无
+ * 输出参数： ptInputEvent - 内含得到的输入数据
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 static int StdinGetInputEvent(PT_InputEvent ptInputEvent)
 {
-	char c;
-	
-	/* 处理数据 */
-	ptInputEvent->type = INPUT_TYPE_STDIN;
+    /* 如果有数据就读取、处理、返回
+     * 如果没有数据, 立刻返回, 不等待
+     */
 
-	/* 如果没有数据，则会休眠直到有输入 */
-	c = fgetc(stdin);
-	gettimeofday(&ptInputEvent->time, NULL);
+    /* select, poll 可以参数 UNIX环境高级编程 */
 
-#if 0
-	if (c == 'u') {
-		ptInputEvent->val = INPUT_VALUE_UP;
-		gettimeofday(&ptInputEvent->time, NULL);
-	} else if (c == 'n') {
-		ptInputEvent->val = INPUT_VALUE_DOWN;		
-		gettimeofday(&ptInputEvent->time, NULL);
-	} else if (c == 'q') {
-		ptInputEvent->val = INPUT_VALUE_EXIT;
-		gettimeofday(&ptInputEvent->time, NULL);
-	} else {
-		ptInputEvent->val = INPUT_VALUE_UNKONW;
-		gettimeofday(&ptInputEvent->time, NULL);
-	}
+    char c;
+
+        /* 处理数据 */
+    ptInputEvent->iType = INPUT_TYPE_STDIN;
+
+    c = fgetc(stdin);  /* 会休眠直到有输入 */
+    (void)c;
+    gettimeofday(&ptInputEvent->tTime, NULL);
+
+#if  0
+    if (c == 'u')
+    {
+        ptInputEvent->iVal = INPUT_VALUE_UP;
+    }
+    else if (c == 'n')
+    {
+        ptInputEvent->iVal = INPUT_VALUE_DOWN;
+    }
+    else if (c == 'q')
+    {
+        ptInputEvent->iVal = INPUT_VALUE_EXIT;
+    }
+    else
+    {
+        ptInputEvent->iVal = INPUT_VALUE_UNKNOWN;
+    }
 #endif
+    return 0;
+ }
 
-	return 0;
-
-}
-
-static T_InputOpr s_tStdinOpr = {
-	.name 			= "stdin",
-	.DeviceInit 	= StdinDevInit,
-	.DeviceExit 	= StdinDevExit,
-	.GetInputEvent  = StdinGetInputEvent,
+static T_InputOpr g_tStdinOpr = {
+    .name          = "stdin",
+    .DeviceInit    = StdinDevInit,
+    .DeviceExit    = StdinDevExit,
+    .GetInputEvent = StdinGetInputEvent,
 };
 
-/**
- * @Description: 标准输入初始化函数，供上层调用注册设备
- * @return 成功：0
- */
+
+/**********************************************************************
+ * 函数名称： StdinInit
+ * 功能描述： 注册"标准输入模块"
+ * 输入参数： 无
+ * 输出参数： 无
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2013/02/08	     V1.0	  韦东山	      创建
+ ***********************************************************************/
 int StdinInit(void)
 {
-	return RegisterInputOpr(&s_tStdinOpr);
+    return RegisterInputOpr(&g_tStdinOpr);
 }
-
